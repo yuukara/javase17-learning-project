@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>ユーザー一覧</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+</head>
+<body>
+    <div class="container">
+        <h1>ユーザー一覧</h1>
+        <a th:href="@{/users/new}" class="btn btn-primary">新規ユーザー作成</a>
+        
+        <!-- ユーザー検索フォーム -->
+        <form th:action="@{/users/search}" method="get" class="mb-3">
+            <div class="form-row">
+                <div class="col">
+                    <input type="text" class="form-control" name="name" placeholder="ユーザー名">
+                </div>
+                <div class="col">
+                    <input type="text" class="form-control" name="email" placeholder="メールアドレス">
+                </div>
+                <div class="col">
+                    <input type="text" class="form-control" name="role" placeholder="役割">
+                </div>
+                <div class="col">
+                    <button type="submit" class="btn btn-primary">検索</button>
+                </div>
+            </div>
+        </form>
+
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>名前</th>
+                    <th>メールアドレス</th>
+                    <th>役割</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr th:each="user : ${users}">
+                    <td th:text="${user.id}"></td>
+                    <td th:text="${user.name}"></td>
+                    <td th:text="${user.email}"></td>
+                    <td th:text="${user.role.name}"></td>
+                    <td>
+                        <a th:href="@{/users/{id}(id=${user.id})}" class="btn btn-info">詳細</a>
+                        <a th:href="@{/users/{id}/edit(id=${user.id})}" class="btn btn-primary">編集</a>
+                        <a th:href="@{/users/{id}/delete(id=${user.id})}" class="btn btn-danger">削除</a>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>ユーザー削除確認</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+</head>
+<body>
+    <div class="container">
+        <h1>ユーザー削除確認</h1>
+        <p th:text="${user.name} + 'を削除します。よろしいですか？'"></p>
+        <form th:action="@{/users/{id}/delete(id=${user.id})}" th:method="post">
+            <button type="submit" class="btn btn-danger">削除</button>
+            <a th:href="@{/users}" class="btn btn-secondary">キャンセル</a>
+        </form>
+    </div>
+</body>
+</html>
