@@ -1,12 +1,16 @@
 package com.example.javase17learningproject.config;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+
+import com.example.javase17learningproject.service.AccessControlService;
 
 /**
  * セキュリティ設定クラス。
@@ -14,7 +18,11 @@ import org.springframework.security.web.SecurityFilterChain;
  */
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity
 public class SecurityConfig {
+
+    @Autowired
+    private AccessControlService accessControlService;
 
     /**
      * パスワードエンコーダーのBeanを定義します。
@@ -41,6 +49,15 @@ public class SecurityConfig {
             .authorizeHttpRequests(authz -> authz
                 .requestMatchers("/css/**", "/js/**", "/images/**").permitAll()
                 .requestMatchers("/h2-console/**").permitAll() // 開発環境用
+                .requestMatchers("/").permitAll() // トップページを許可
+                .requestMatchers("/users").permitAll()
+                .requestMatchers("/users/search").hasAnyAuthority("ROLE_ADMIN", "ROLE_MODERATOR", "ROLE_USER")
+                .requestMatchers("/users/new").hasAnyAuthority("ROLE_ADMIN", "ROLE_MODERATOR")
+                .requestMatchers("/users/{id}").hasAnyAuthority("ROLE_ADMIN", "ROLE_MODERATOR", "ROLE_USER")
+                .requestMatchers("/users/{id}/edit").access((authentication, context) ->
+                    accessControlService.canEditUser(Long.parseLong(context.getVariables().get("id"))))
+                .requestMatchers("/users/{id}/delete").access((authentication, context) ->
+                    accessControlService.canDeleteUser(Long.parseLong(context.getVariables().get("id"))))
                 .anyRequest().authenticated()
             )
             .formLogin(form -> form

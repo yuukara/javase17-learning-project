@@ -132,4 +132,64 @@ class AccessControlServiceTest {
         assertFalse(accessControlService.canDeleteUser(normalUser1));
         assertFalse(accessControlService.canDeleteUser(normalUser2));
     }
+
+    @Test
+    @DisplayName("管理者は全ての役割のユーザーを表示可能")
+    void adminCanViewAllRoles() {
+        when(authentication.getPrincipal()).thenReturn(adminUser);
+
+        assertTrue(accessControlService.canViewUsersByRole("ADMIN"));
+        assertTrue(accessControlService.canViewUsersByRole("MODERATOR"));
+        assertTrue(accessControlService.canViewUsersByRole("USER"));
+    }
+
+    @Test
+    @DisplayName("管理補助者は一般ユーザーのみ表示可能")
+    void moderatorCanOnlyViewUsers() {
+        when(authentication.getPrincipal()).thenReturn(moderatorUser);
+
+        assertFalse(accessControlService.canViewUsersByRole("ADMIN"));
+        assertFalse(accessControlService.canViewUsersByRole("MODERATOR"));
+        assertTrue(accessControlService.canViewUsersByRole("USER"));
+    }
+
+    @Test
+    @DisplayName("一般ユーザーは一般ユーザーのみ表示可能")
+    void normalUserCanOnlyViewUsers() {
+        when(authentication.getPrincipal()).thenReturn(normalUser1);
+
+        assertFalse(accessControlService.canViewUsersByRole("ADMIN"));
+        assertFalse(accessControlService.canViewUsersByRole("MODERATOR"));
+        assertTrue(accessControlService.canViewUsersByRole("USER"));
+    }
+
+    @Test
+    @DisplayName("管理者は全ての役割のユーザーを作成可能")
+    void adminCanCreateAllRoles() {
+        when(authentication.getPrincipal()).thenReturn(adminUser);
+
+        assertTrue(accessControlService.canCreateUserWithRole("ADMIN"));
+        assertTrue(accessControlService.canCreateUserWithRole("MODERATOR"));
+        assertTrue(accessControlService.canCreateUserWithRole("USER"));
+    }
+
+    @Test
+    @DisplayName("管理補助者は一般ユーザーのみ作成可能")
+    void moderatorCanOnlyCreateUsers() {
+        when(authentication.getPrincipal()).thenReturn(moderatorUser);
+
+        assertFalse(accessControlService.canCreateUserWithRole("ADMIN"));
+        assertFalse(accessControlService.canCreateUserWithRole("MODERATOR"));
+        assertTrue(accessControlService.canCreateUserWithRole("USER"));
+    }
+
+    @Test
+    @DisplayName("一般ユーザーは誰も作成できない")
+    void normalUserCannotCreateAnyRole() {
+        when(authentication.getPrincipal()).thenReturn(normalUser1);
+
+        assertFalse(accessControlService.canCreateUserWithRole("ADMIN"));
+        assertFalse(accessControlService.canCreateUserWithRole("MODERATOR"));
+        assertFalse(accessControlService.canCreateUserWithRole("USER"));
+    }
 }

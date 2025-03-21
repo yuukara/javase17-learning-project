@@ -2,7 +2,10 @@ package com.example.javase17learningproject;
 
 import java.time.LocalDateTime;
 import java.util.Collection;
-import java.util.List;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
@@ -10,6 +13,7 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -18,7 +22,8 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
+import jakarta.persistence.JoinTable;
+import jakarta.persistence.ManyToMany;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -52,8 +57,8 @@ public class User implements UserDetails {
         return password;
     }
 
-    public Role getRole() {
-        return role;
+    public Set<Role> getRoles() {
+        return roles;
     }
 
     public LocalDateTime getCreatedAt() {
@@ -76,21 +81,26 @@ public class User implements UserDetails {
     public void setEmail(String email) {
         this.email = email;
     }
+public void setRoles(Set<Role> roles) {
+    this.roles = roles;
+}
 
-    public void setPassword(String password) {
-        this.password = password;
-    }
-
-    public void setRole(Role role) {
-        this.role = role;
-    }
-
-    public void setCreatedAt(LocalDateTime createdAt) {
+public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
     }
 
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    /**
+     * ユーザーの主要な役割を取得します。
+     * 複数の役割がある場合は最初の役割を返します。
+     *
+     * @return ユーザーの主要な役割
+     */
+    public Role getRole() {
+        return roles.isEmpty() ? null : roles.iterator().next();
     }
 
     public void setAccountNonExpired(boolean accountNonExpired) {
@@ -125,10 +135,14 @@ public class User implements UserDetails {
     @Size(min = 8, message = "パスワードは8文字以上で入力してください")
     private String password;
 
-    @ManyToOne
-    @JoinColumn(name = "role_id")
+    @ManyToMany
+    @JoinTable(
+        name = "user_roles",
+        joinColumns = @JoinColumn(name = "user_id"),
+        inverseJoinColumns = @JoinColumn(name = "role_id")
+    )
     @NotNull(message = "役割は必須です")
-    private Role role;
+    private Set<Role> roles = new HashSet<>();
 
     @CreatedDate
     @Column(nullable = false, updatable = false)
@@ -147,21 +161,55 @@ public class User implements UserDetails {
     public User() {}
 
     // メインのコンストラクタ
-    public User(String name, String email, Role role, String password) {
+    public User(String name, String email, Set<Role> roles, String password) {
         this.name = name;
         this.email = email;
-        this.role = role;
-        this.password = password;
+        this.roles = roles;
+        setPassword(password); // パスワードのハッシュ化を確実に行う
+    }
+
+    public void setPassword(String password) {
+        if (password != null) {
+            this.password = new BCryptPasswordEncoder().encode(password);
+        }
+    }
+
+    @Override
+    public String toString() {
+        return String.format("User[id=%d, name='%s', email='%s', roles=%s]",
+                id, name, email, roles.stream()
+                    .map(Role::getName)
+                    .collect(Collectors.joining(", ")));
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof User)) return false;
+        User user = (User) o;
+        return id != null && id.equals(user.getId());
+    }
+
+    @Override
+    public int hashCode() {
+        return getClass().hashCode();
+    }
+
+    // 単一のロールを受け取るコンストラクタ
+    public User(String name, String email, Role role, String password) {
+        this(name, email, Collections.singleton(role), password);
     }
 
     // 後方互換性のためのコンストラクタ
     public User(String name, String email, Role role) {
-        this(name, email, role, null);
+        this(name, email, Collections.singleton(role), null);
     }
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        return List.of(new SimpleGrantedAuthority("ROLE_" + role.getName()));
+        return roles.stream()
+            .map(role -> new SimpleGrantedAuthority("ROLE_" + role.getName()))
+            .collect(Collectors.toList());
     }
 
     @Override

@@ -8,27 +8,49 @@
 <body>
     <div class="container">
         <h1>ユーザー一覧</h1>
-        <a th:href="@{/users/new}" class="btn btn-primary">新規ユーザー作成</a>
+        <div class="d-flex justify-content-between mb-3">
+            <a th:href="@{/users/new}" class="btn btn-primary">新規ユーザー作成</a>
+            <div class="btn-group" role="group">
+                <a th:href="@{/users}" class="btn btn-outline-secondary">全て</a>
+                <a th:href="@{/users/search(role='ADMIN')}" class="btn btn-outline-secondary">管理者</a>
+                <a th:href="@{/users/search(role='MODERATOR')}" class="btn btn-outline-secondary">管理補助者</a>
+                <a th:href="@{/users/search(role='USER')}" class="btn btn-outline-secondary">一般ユーザー</a>
+            </div>
+        </div>
         
         <!-- ユーザー検索フォーム -->
         <form th:action="@{/users/search}" method="get" class="mb-3">
             <div class="form-row">
                 <div class="col">
-                    <input type="text" class="form-control" name="name" placeholder="ユーザー名">
+                    <input type="text" class="form-control" name="name" placeholder="ユーザー名"
+                           th:value="${param.name}">
                 </div>
                 <div class="col">
-                    <input type="text" class="form-control" name="email" placeholder="メールアドレス">
+                    <input type="text" class="form-control" name="email" placeholder="メールアドレス"
+                           th:value="${param.email}">
                 </div>
                 <div class="col">
-                    <input type="text" class="form-control" name="role" placeholder="役割">
+                    <select class="form-control" name="role">
+                        <option value="">全ての役割</option>
+                        <option value="ADMIN" th:selected="${param.role == 'ADMIN'}">管理者</option>
+                        <option value="MODERATOR" th:selected="${param.role == 'MODERATOR'}">管理補助者</option>
+                        <option value="USER" th:selected="${param.role == 'USER'}">一般ユーザー</option>
+                    </select>
                 </div>
                 <div class="col">
                     <button type="submit" class="btn btn-primary">検索</button>
+                    <a th:href="@{/users}" class="btn btn-secondary">クリア</a>
                 </div>
             </div>
         </form>
 
-        <table class="table">
+        <!-- 検索結果がない場合のメッセージ -->
+        <div th:if="${users.isEmpty()}" class="alert alert-info">
+            <p class="mb-0">検索条件に一致するユーザーが見つかりませんでした。</p>
+        </div>
+
+        <!-- ユーザー一覧テーブル -->
+        <table class="table" th:unless="${users.isEmpty()}">
             <thead>
                 <tr>
                     <th>ID</th>
@@ -43,11 +65,19 @@
                     <td th:text="${user.id}"></td>
                     <td th:text="${user.name}"></td>
                     <td th:text="${user.email}"></td>
-                    <td th:text="${user.role.name}"></td>
                     <td>
-                        <a th:href="@{/users/{id}(id=${user.id})}" class="btn btn-info">詳細</a>
-                        <a th:href="@{/users/{id}/edit(id=${user.id})}" class="btn btn-primary">編集</a>
-                        <a th:href="@{/users/{id}/delete(id=${user.id})}" class="btn btn-danger">削除</a>
+                        <span th:switch="${user.role.name}">
+                            <span th:case="'ADMIN'" class="badge badge-danger">管理者</span>
+                            <span th:case="'MODERATOR'" class="badge badge-warning">管理補助者</span>
+                            <span th:case="'USER'" class="badge badge-info">一般ユーザー</span>
+                        </span>
+                    </td>
+                    <td>
+                        <div class="btn-group" role="group">
+                            <a th:href="@{/users/{id}(id=${user.id})}" class="btn btn-sm btn-info">詳細</a>
+                            <a th:href="@{/users/{id}/edit(id=${user.id})}" class="btn btn-sm btn-primary">編集</a>
+                            <a th:href="@{/users/{id}/delete(id=${user.id})}" class="btn btn-sm btn-danger">削除</a>
+                        </div>
                     </td>
                 </tr>
             </tbody>

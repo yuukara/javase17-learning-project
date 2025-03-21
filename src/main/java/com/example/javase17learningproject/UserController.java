@@ -1,7 +1,9 @@
 package com.example.javase17learningproject;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
@@ -87,7 +89,11 @@ public class UserController {
       existingUser.setName(name);
       existingUser.setEmail(email);
       Optional<Role> newRole = roleRepository.findByName(role);
-      newRole.ifPresent(existingUser::setRole);
+      newRole.ifPresent(r -> {
+          Set<Role> roles = new HashSet<>();
+          roles.add(r);
+          existingUser.setRoles(roles);
+      });
       userRepository.save(existingUser);
       return "redirect:/users";
     } else {
