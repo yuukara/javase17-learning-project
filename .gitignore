@@ -32,6 +32,11 @@ build/
 ### VS Code ###
 .vscode/
 
+### Logs ###
+logs/
+*.log
+*.log.gz
+
 ### OS specific ###
 .DS_Store
 Thumbs.db

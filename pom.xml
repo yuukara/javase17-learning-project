@@ -92,6 +92,11 @@
 		<artifactId>spring-security-test</artifactId>
 		<scope>test</scope>
 		</dependency>
+		<dependency>
+			<groupId>org.junit.jupiter</groupId>
+			<artifactId>junit-jupiter</artifactId>
+			<scope>test</scope>
+		</dependency>
 	</dependencies>
 
 	<build>
@@ -106,6 +111,17 @@
 	<artifactId>lombok</artifactId>
 	</exclude>
 	</excludes>
+	</configuration>
+	</plugin>
+	<plugin>
+	<groupId>org.apache.maven.plugins</groupId>
+	<artifactId>maven-compiler-plugin</artifactId>
+	<version>3.8.1</version>
+	<configuration>
+	    <compilerArgs>
+	        <arg>-Xlint:none</arg>
+	        <arg>-parameters</arg>
+	    </compilerArgs>
 	</configuration>
 	</plugin>
 	</plugins>

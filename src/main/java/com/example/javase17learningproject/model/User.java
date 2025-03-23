@@ -111,9 +111,21 @@ public class User implements UserDetails {
         return password;
     }
 
+    /**
+     * パスワードを設定します。
+     * BCryptでエンコードされていない場合のみエンコードを行います。
+     * 
+     * @param password 設定するパスワード（平文またはエンコード済み）
+     */
     public void setPassword(String password) {
-        if (password != null) {
-            this.password = new BCryptPasswordEncoder().encode(password);
+        if (password == null) {
+            return;
+        }
+        // BCryptエンコード済みかどうかをチェック
+        if (password.startsWith("$2a$") || password.startsWith("$2b$") || password.startsWith("$2y$")) {
+            this.password = password;  // エンコード済みの場合はそのまま設定
+        } else {
+            this.password = new BCryptPasswordEncoder().encode(password);  // 平文の場合はエンコード
         }
     }
 
@@ -156,7 +168,7 @@ public class User implements UserDetails {
     public Collection<? extends GrantedAuthority> getAuthorities() {
         Set<GrantedAuthority> authorities = new HashSet<>();
         for (Role role : roles) {
-            authorities.add(new SimpleGrantedAuthority(role.getName()));
+            authorities.add(new SimpleGrantedAuthority(role.getPrefix() + role.getName()));
         }
         return authorities;
     }
@@ -192,6 +204,7 @@ public class User implements UserDetails {
 
     /**
      * ユーザーを作成するためのコンストラクタ。
+     * パスワードは平文で受け取り、エンコードして保存します。
      */
     public User(String name, String email, String password) {
         this.name = name;

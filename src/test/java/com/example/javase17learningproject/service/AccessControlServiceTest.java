@@ -38,7 +38,7 @@ class AccessControlServiceTest {
     private Role userRole;
 
     @BeforeEach
-    @SuppressWarnings("unused")
+    @SuppressWarnings("unused")  // 「使われていない」警告を抑制
     void setup() {
         // 役割の設定
         adminRole = new Role("ADMIN");

@@ -1,13 +1,11 @@
 package com.example.javase17learningproject.config;
 
-import java.io.IOException;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.authorization.AuthorizationDecision;
@@ -15,22 +13,20 @@ import org.springframework.security.config.annotation.authentication.configurati
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.security.web.authentication.AuthenticationFailureHandler;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.authentication.logout.LogoutSuccessHandler;
 
 import com.example.javase17learningproject.service.AccessControlService;
 import com.example.javase17learningproject.service.CustomUserDetailsService;
 
-import jakarta.servlet.ServletException;
-import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+
 
 /**
  * セキュリティ設定クラス。
@@ -74,13 +70,9 @@ public class SecurityConfig {
      */
     @Bean
     public AuthenticationSuccessHandler authenticationSuccessHandler() {
-        return new AuthenticationSuccessHandler() {
-            @Override
-            public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response,
-                    Authentication authentication) throws IOException, ServletException {
-                logger.info("認証成功: user={}", authentication.getName());
-                response.sendRedirect("/");
-            }
+        return (request, response, authentication) -> {
+            logger.info("認証成功: user={}", authentication.getName());
+            response.sendRedirect("/");
         };
     }
 
@@ -89,13 +81,9 @@ public class SecurityConfig {
      */
     @Bean
     public AuthenticationFailureHandler authenticationFailureHandler() {
-        return new AuthenticationFailureHandler() {
-            @Override
-            public void onAuthenticationFailure(HttpServletRequest request, HttpServletResponse response,
-                    AuthenticationException exception) throws IOException, ServletException {
-                logger.warn("認証失敗: {}", exception.getMessage());
-                response.sendRedirect("/login?error");
-            }
+        return (request, response, exception) -> {
+            logger.warn("認証失敗: {}", exception.getMessage());
+            response.sendRedirect("/login?error");
         };
     }
 
@@ -104,14 +92,9 @@ public class SecurityConfig {
      */
     @Bean
     public AccessDeniedHandler accessDeniedHandler() {
-        return new AccessDeniedHandler() {
-            @Override
-            public void handle(HttpServletRequest request, HttpServletResponse response,
-                    org.springframework.security.access.AccessDeniedException accessDeniedException)
-                    throws IOException, ServletException {
-                logger.warn("アクセス拒否: {}, path={}", accessDeniedException.getMessage(), request.getRequestURI());
-                response.sendRedirect("/error/403");
-            }
+        return (request, response, accessDeniedException) -> {
+            logger.warn("アクセス拒否: {}, path={}", accessDeniedException.getMessage(), request.getRequestURI());
+            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
         };
     }
 
@@ -120,15 +103,11 @@ public class SecurityConfig {
      */
     @Bean
     public LogoutSuccessHandler logoutSuccessHandler() {
-        return new LogoutSuccessHandler() {
-            @Override
-            public void onLogoutSuccess(HttpServletRequest request, HttpServletResponse response,
-                    Authentication authentication) throws IOException, ServletException {
-                if (authentication != null) {
-                    logger.info("ログアウト成功: user={}", authentication.getName());
-                }
-                response.sendRedirect("/login?logout");
+        return (request, response, authentication) -> {
+            if (authentication != null) {
+                logger.info("ログアウト成功: user={}", authentication.getName());
             }
+            response.sendRedirect("/login?logout");
         };
     }
 
@@ -144,16 +123,16 @@ public class SecurityConfig {
                     return new AuthorizationDecision(canView);
                 })
                 .requestMatchers("/users/new").hasAnyAuthority("ROLE_ADMIN", "ROLE_MODERATOR")
-                .requestMatchers("/users/{id}").hasAnyAuthority("ROLE_ADMIN", "ROLE_MODERATOR", "ROLE_USER")
                 .requestMatchers("/users/{id}/edit").access((authentication, context) -> {
-                    Long userId = Long.parseLong(context.getVariables().get("id"));
+                    Long userId = Long.valueOf(context.getVariables().get("id"));
                     return accessControlService.canEditUser(userId);
                 })
                 .requestMatchers("/users/{id}/delete").access((authentication, context) -> {
-                    Long userId = Long.parseLong(context.getVariables().get("id"));
+                    Long userId = Long.valueOf(context.getVariables().get("id"));
                     return accessControlService.canDeleteUser(userId);
                 })
-                .requestMatchers("/users/**").hasAnyAuthority("ROLE_ADMIN", "ROLE_MODERATOR")
+                .requestMatchers("/users/{id}/**").hasAnyAuthority("ROLE_ADMIN", "ROLE_MODERATOR", "ROLE_USER")
+                .requestMatchers("/users").hasAnyAuthority("ROLE_ADMIN", "ROLE_MODERATOR", "ROLE_USER")
                 .anyRequest().authenticated()
             )
             .formLogin(form -> form
@@ -178,8 +157,8 @@ public class SecurityConfig {
                     .sameOrigin() // H2コンソール用
                 )
             )
-            .userDetailsService(userDetailsService); // カスタムUserDetailsServiceを設定
-
+            .userDetailsService(userDetailsService) // カスタムUserDetailsServiceを設定
+           .addFilterBefore(new EnhancedAccessControlDebugFilter(accessControlService), UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
 
