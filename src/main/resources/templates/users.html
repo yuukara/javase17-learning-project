@@ -66,7 +66,7 @@
                     <td th:text="${user.name}"></td>
                     <td th:text="${user.email}"></td>
                     <td>
-                        <span th:switch="${user.role.name}">
+                        <span th:switch="${user.roles.iterator().next().name}">
                             <span th:case="'ADMIN'" class="badge badge-danger">管理者</span>
                             <span th:case="'MODERATOR'" class="badge badge-warning">管理補助者</span>
                             <span th:case="'USER'" class="badge badge-info">一般ユーザー</span>

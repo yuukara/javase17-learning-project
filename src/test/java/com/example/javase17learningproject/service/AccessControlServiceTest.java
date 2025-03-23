@@ -14,8 +14,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 
-import com.example.javase17learningproject.Role;
-import com.example.javase17learningproject.User;
+import com.example.javase17learningproject.model.Role;
+import com.example.javase17learningproject.model.User;
 
 @ExtendWith(MockitoExtension.class)
 class AccessControlServiceTest {
@@ -41,30 +41,31 @@ class AccessControlServiceTest {
     @SuppressWarnings("unused")
     void setup() {
         // 役割の設定
-        adminRole = new Role();
+        adminRole = new Role("ADMIN");
         adminRole.setId(1L);
-        adminRole.setName("ADMIN");
 
-        moderatorRole = new Role();
+        moderatorRole = new Role("MODERATOR");
         moderatorRole.setId(2L);
-        moderatorRole.setName("MODERATOR");
 
-        userRole = new Role();
+        userRole = new Role("USER");
         userRole.setId(3L);
-        userRole.setName("USER");
 
         // ユーザーの設定
-        adminUser = new User("Admin", "admin@example.com", adminRole);
+        adminUser = new User("Admin", "admin@example.com", "password");
         adminUser.setId(1L);
+        adminUser.getRoles().add(adminRole);
 
-        moderatorUser = new User("Moderator", "moderator@example.com", moderatorRole);
+        moderatorUser = new User("Moderator", "moderator@example.com", "password");
         moderatorUser.setId(2L);
+        moderatorUser.getRoles().add(moderatorRole);
 
-        normalUser1 = new User("User1", "user1@example.com", userRole);
+        normalUser1 = new User("User1", "user1@example.com", "password");
         normalUser1.setId(3L);
+        normalUser1.getRoles().add(userRole);
 
-        normalUser2 = new User("User2", "user2@example.com", userRole);
+        normalUser2 = new User("User2", "user2@example.com", "password");
         normalUser2.setId(4L);
+        normalUser2.getRoles().add(userRole);
 
         // セキュリティコンテキストの設定
         when(securityContext.getAuthentication()).thenReturn(authentication);

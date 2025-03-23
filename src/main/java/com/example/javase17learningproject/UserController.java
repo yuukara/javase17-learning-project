@@ -1,9 +1,7 @@
 package com.example.javase17learningproject;
 
-import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
@@ -13,6 +11,11 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+
+import com.example.javase17learningproject.model.Role;
+import com.example.javase17learningproject.model.User;
+import com.example.javase17learningproject.repository.RoleRepository;
+import com.example.javase17learningproject.repository.UserRepository;
 
 /**
  * ユーザーコントローラー。 ユーザー関連のAPIエンドポイントを提供します。
@@ -75,30 +78,34 @@ public class UserController {
   }
 
   /**
-   * ユーザーを更新します。
+   * ユーザー情報を更新します。
    *
    * @param id ユーザーID
-   * @param userDetails 更新するユーザー情報
-   * @return ユーザー一覧画面にリダイレクト
+   * @param name 更新後のユーザー名
+   * @param email 更新後のメールアドレス
+   * @param role 更新後のロール名
+   * @return 更新成功時はユーザー一覧画面へリダイレクト、ユーザーが存在しない場合は404エラー画面を表示
    */
   @PostMapping("/{id}")
-  public String updateUser(@PathVariable Long id, @RequestParam String name, @RequestParam String email, @RequestParam("role") String role) {
-    Optional<User> user = userRepository.findById(id);
-    if (user.isPresent()) {
-      User existingUser = user.get();
-      existingUser.setName(name);
-      existingUser.setEmail(email);
-      Optional<Role> newRole = roleRepository.findByName(role);
-      newRole.ifPresent(r -> {
-          Set<Role> roles = new HashSet<>();
-          roles.add(r);
-          existingUser.setRoles(roles);
-      });
-      userRepository.save(existingUser);
-      return "redirect:/users";
-    } else {
-      return "error/404"; // 404エラー画面を表示
-    }
+  public String updateUser(@PathVariable Long id,
+      @RequestParam String name,
+      @RequestParam String email,
+      @RequestParam("role") String role) {
+    User existingUser = userRepository.findById(id)
+        .orElseThrow(() -> new RuntimeException("User not found with id: " + id));
+    
+    existingUser.setName(name);
+    existingUser.setEmail(email);
+
+    Role newRole = roleRepository.findByName(role)
+        .orElseThrow(() -> new RuntimeException("Role not found: " + role));
+
+    // 既存のロールコレクションを操作
+    existingUser.getRoles().clear();
+    existingUser.getRoles().add(newRole);
+    
+    userRepository.save(existingUser);
+    return "redirect:/users";
   }
 
   /**
@@ -158,12 +165,16 @@ public class UserController {
    */
   @PostMapping
   public String createUser(@RequestParam String name, @RequestParam String email, @RequestParam("role") String role) {
-    Optional<Role> newRole = roleRepository.findByName(role);
-    newRole.ifPresent(roleValue -> {
-        User newUser = new User(name, email, roleValue);
-        userRepository.save(newUser);
-    });
-    return "redirect:/users";
+      // 一時的なパスワードを設定（本番環境では適切なパスワード生成ロジックを使用すべき）
+      String temporaryPassword = "tempPass123";
+      
+      Optional<Role> newRole = roleRepository.findByName(role);
+      if (newRole.isPresent()) {
+          User newUser = new User(name, email, temporaryPassword);
+          newUser.getRoles().add(newRole.get());
+          userRepository.save(newUser);
+      }
+      return "redirect:/users";
   }
 
   /**

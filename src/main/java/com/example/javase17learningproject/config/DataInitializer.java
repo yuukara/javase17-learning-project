@@ -8,10 +8,10 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
-import com.example.javase17learningproject.Role;
-import com.example.javase17learningproject.RoleRepository;
-import com.example.javase17learningproject.User;
-import com.example.javase17learningproject.UserRepository;
+import com.example.javase17learningproject.model.Role;
+import com.example.javase17learningproject.model.User;
+import com.example.javase17learningproject.repository.RoleRepository;
+import com.example.javase17learningproject.repository.UserRepository;
 
 /**
  * データの初期化を行うクラス。
@@ -53,12 +53,8 @@ public class DataInitializer {
                 Role adminRole = roleRepository.findByName("admin")
                     .orElseThrow(() -> new RuntimeException("Admin role not found"));
                 
-                User adminUser = new User();
-                adminUser.setName("管理者");
-                adminUser.setEmail("admin@example.com");
-                adminUser.setPassword(passwordEncoder.encode("admin123"));
+                User adminUser = new User("管理者", "admin@example.com", passwordEncoder.encode("admin123"));
                 adminUser.setRoles(Collections.singleton(adminRole));
-                adminUser.setEnabled(true);
                 
                 userRepository.save(adminUser);
             }

@@ -8,8 +8,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
-import com.example.javase17learningproject.User;
-import com.example.javase17learningproject.UserRepository;
+import com.example.javase17learningproject.model.User;
+import com.example.javase17learningproject.repository.UserRepository;
 
 /**
  * アクセス制御サービス。
@@ -41,23 +41,33 @@ public class AccessControlService {
      */
     public boolean canEditUser(User targetUser) {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        User currentUser = (User) auth.getPrincipal();
+        if (auth == null) return false;
+        
+        // 認証されたユーザーの名前（通常はメールアドレス）を取得
+        String email = auth.getName();
+        
+        // メールアドレスを使用してアプリケーションのUserオブジェクトを取得
+        User currentUser = userRepository.findByEmail(email).orElse(null);
+        if (currentUser == null) {
+            logger.warn("認証情報に対応するユーザーが見つかりません: {}", email);
+            return false;
+        }
 
         // 管理者は全てのユーザーを編集可能
-        if (currentUser.getRole().getName().equals("ADMIN")) {
+        if (currentUser.getRoles().iterator().next().getName().equals("ADMIN")) {
             logger.debug("管理者によるユーザー編集: target={}", targetUser.getEmail());
             return true;
         }
 
         // 管理補助者は一般ユーザーのみ編集可能
-        if (currentUser.getRole().getName().equals("MODERATOR") &&
-            targetUser.getRole().getName().equals("USER")) {
+        if (currentUser.getRoles().iterator().next().getName().equals("MODERATOR") &&
+            targetUser.getRoles().iterator().next().getName().equals("USER")) {
             logger.debug("管理補助者によるユーザー編集: target={}", targetUser.getEmail());
             return true;
         }
 
         // 一般ユーザーは自分自身のみ編集可能
-        if (currentUser.getRole().getName().equals("USER") &&
+        if (currentUser.getRoles().iterator().next().getName().equals("USER") &&
             currentUser.getId().equals(targetUser.getId())) {
             logger.debug("ユーザーによる自身の編集: user={}", currentUser.getEmail());
             return true;
@@ -94,14 +104,14 @@ public class AccessControlService {
         User currentUser = (User) auth.getPrincipal();
 
         // 管理者は全てのユーザーを削除可能
-        if (currentUser.getRole().getName().equals("ADMIN")) {
+        if (currentUser.getRoles().iterator().next().getName().equals("ADMIN")) {
             logger.info("管理者によるユーザー削除: target={}", targetUser.getEmail());
             return true;
         }
 
         // 管理補助者は一般ユーザーのみ削除可能
-        if (currentUser.getRole().getName().equals("MODERATOR") &&
-            targetUser.getRole().getName().equals("USER")) {
+        if (currentUser.getRoles().iterator().next().getName().equals("MODERATOR") &&
+            targetUser.getRoles().iterator().next().getName().equals("USER")) {
             logger.info("管理補助者によるユーザー削除: target={}", targetUser.getEmail());
             return true;
         }
@@ -125,6 +135,7 @@ public class AccessControlService {
         }
         return new AuthorizationDecision(canDeleteUser(targetUser));
     }
+
     /**
      * 指定された役割のユーザー一覧を表示できるかチェックします。
      *
@@ -136,20 +147,20 @@ public class AccessControlService {
         User currentUser = (User) auth.getPrincipal();
 
         // 管理者は全ての役割のユーザーを表示可能
-        if (currentUser.getRole().getName().equals("ADMIN")) {
+        if (currentUser.getRoles().iterator().next().getName().equals("ADMIN")) {
             logger.debug("管理者によるユーザー一覧表示: role={}", role);
             return true;
         }
 
         // 管理補助者は一般ユーザーのみ表示可能
-        if (currentUser.getRole().getName().equals("MODERATOR") &&
+        if (currentUser.getRoles().iterator().next().getName().equals("MODERATOR") &&
             role.equals("USER")) {
             logger.debug("管理補助者による一般ユーザー一覧表示");
             return true;
         }
 
         // 一般ユーザーは一般ユーザーのみ表示可能
-        if (currentUser.getRole().getName().equals("USER") &&
+        if (currentUser.getRoles().iterator().next().getName().equals("USER") &&
             role.equals("USER")) {
             logger.debug("一般ユーザーによる一般ユーザー一覧表示");
             return true;
@@ -171,13 +182,13 @@ public class AccessControlService {
         User currentUser = (User) auth.getPrincipal();
 
         // 管理者は全ての役割のユーザーを作成可能
-        if (currentUser.getRole().getName().equals("ADMIN")) {
+        if (currentUser.getRoles().iterator().next().getName().equals("ADMIN")) {
             logger.info("管理者によるユーザー作成: role={}", role);
             return true;
         }
 
         // 管理補助者は一般ユーザーのみ作成可能
-        if (currentUser.getRole().getName().equals("MODERATOR") &&
+        if (currentUser.getRoles().iterator().next().getName().equals("MODERATOR") &&
             role.equals("USER")) {
             logger.info("管理補助者による一般ユーザー作成");
             return true;

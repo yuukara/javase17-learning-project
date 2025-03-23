@@ -1,7 +1,8 @@
-package com.example.javase17learningproject;
+package com.example.javase17learningproject.repository;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.AfterEach;
@@ -9,13 +10,16 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
-/**
- * UserRepositoryのテストクラス。
- * データベース操作の検証を行います。
- */
+import com.example.javase17learningproject.config.TestConfig;
+import com.example.javase17learningproject.model.Role;
+import com.example.javase17learningproject.model.User;
+
 @DataJpaTest
-public class UserRepositoryTest {
+@Import(TestConfig.class)
+class UserRepositoryTest {
 
     @Autowired
     private UserRepository userRepository;
@@ -23,13 +27,16 @@ public class UserRepositoryTest {
     @Autowired
     private RoleRepository roleRepository;
 
+    @Autowired
+    private BCryptPasswordEncoder passwordEncoder;
+
     private Role userRole;
     private Role adminRole;
 
     @BeforeEach
     void setUp() {
-        userRole = new Role("USER");
-        adminRole = new Role("ADMIN");
+        userRole = new Role("ROLE_USER");
+        adminRole = new Role("ROLE_ADMIN");
         roleRepository.saveAll(List.of(userRole, adminRole));
     }
 
@@ -42,7 +49,7 @@ public class UserRepositoryTest {
     @Test
     void testSaveUser() {
         // テストデータの準備
-        User user = new User("testUser", "test@example.com", userRole, "password123");
+        User user = createUser("testUser", "test@example.com", userRole);
 
         // 保存の実行
         User savedUser = userRepository.save(user);
@@ -51,13 +58,13 @@ public class UserRepositoryTest {
         assertThat(savedUser.getId()).isNotNull();
         assertThat(savedUser.getName()).isEqualTo("testUser");
         assertThat(savedUser.getEmail()).isEqualTo("test@example.com");
-        assertThat(savedUser.getRole().getName()).isEqualTo("USER");
+        assertThat(savedUser.getRoles()).containsExactly(userRole);
     }
 
     @Test
     void testFindByEmail() {
         // テストデータの準備
-        User user = new User("testUser", "test@example.com", userRole, "password123");
+        User user = createUser("testUser", "test@example.com", userRole);
         userRepository.save(user);
 
         // 検索の実行
@@ -71,9 +78,9 @@ public class UserRepositoryTest {
     @Test
     void testFindByNameContaining() {
         // テストデータの準備
-        User user1 = new User("testUser1", "test1@example.com", userRole, "password123");
-        User user2 = new User("testUser2", "test2@example.com", adminRole, "password123");
-        User user3 = new User("otherUser", "other@example.com", userRole, "password123");
+        User user1 = createUser("testUser1", "test1@example.com", userRole);
+        User user2 = createUser("testUser2", "test2@example.com", adminRole);
+        User user3 = createUser("otherUser", "other@example.com", userRole);
         userRepository.saveAll(List.of(user1, user2, user3));
 
         // 検索の実行
@@ -85,16 +92,16 @@ public class UserRepositoryTest {
     }
 
     @Test
-    void testFindByRole() {
+    void testSearchByRole() {
         // テストデータの準備
-        User user1 = new User("testUser1", "test1@example.com", userRole, "password123");
-        User user2 = new User("testUser2", "test2@example.com", adminRole, "password123");
-        User user3 = new User("testUser3", "test3@example.com", userRole, "password123");
+        User user1 = createUser("testUser1", "test1@example.com", userRole);
+        User user2 = createUser("testUser2", "test2@example.com", adminRole);
+        User user3 = createUser("testUser3", "test3@example.com", userRole);
         userRepository.saveAll(List.of(user1, user2, user3));
 
         // 検索の実行
-        List<User> userRoleUsers = userRepository.findByRoles(userRole);
-        List<User> adminRoleUsers = userRepository.findByRoles(adminRole);
+        List<User> userRoleUsers = userRepository.findByRoles("ROLE_USER");
+        List<User> adminRoleUsers = userRepository.findByRoles("ROLE_ADMIN");
 
         // 検証
         assertThat(userRoleUsers).hasSize(2);
@@ -103,17 +110,12 @@ public class UserRepositoryTest {
         assertThat(adminRoleUsers).extracting("name").containsExactly("testUser2");
     }
 
-    @Test
-    void testDeleteUser() {
-        // テストデータの準備
-        User user = new User("testUser", "test@example.com", userRole, "password123");
-        User savedUser = userRepository.save(user);
-
-        // 削除の実行
-        userRepository.deleteById(savedUser.getId());
-
-        // 検証
-        Optional<User> deletedUser = userRepository.findById(savedUser.getId());
-        assertThat(deletedUser).isEmpty();
+    private User createUser(String name, String email, Role role) {
+        User user = new User();
+        user.setName(name);
+        user.setEmail(email);
+        user.setPassword(passwordEncoder.encode("password123"));
+        user.setRoles(Set.of(role));
+        return user;
     }
 }

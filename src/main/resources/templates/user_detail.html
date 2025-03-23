@@ -13,7 +13,14 @@
                 <h5 class="card-title" th:text="${user.name}"></h5>
                 <p class="card-text">ID: <span th:text="${user.id}"></span></p>
                 <p class="card-text">メールアドレス: <span th:text="${user.email}"></span></p>
-                <p class="card-text">役割: <span th:text="${user.role}"></span></p>
+                <p class="card-text">役割:
+                    <span th:with="role=${user.roles.iterator().next()}"
+                          th:switch="${role.name}">
+                        <span th:case="'ADMIN'" class="badge badge-danger">管理者</span>
+                        <span th:case="'MODERATOR'" class="badge badge-warning">管理補助者</span>
+                        <span th:case="'USER'" class="badge badge-info">一般ユーザー</span>
+                    </span>
+                </p>
                 <a th:href="@{/users}" class="btn btn-secondary">戻る</a>
                 <a th:href="@{/users/{id}/edit(id=${user.id})}" class="btn btn-primary">編集</a>
                 <a th:href="@{/users/{id}/delete(id=${user.id})}" class="btn btn-danger">削除</a>
