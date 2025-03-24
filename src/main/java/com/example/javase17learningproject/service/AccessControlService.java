@@ -57,8 +57,26 @@ public class AccessControlService {
      * @return 役割を持っている場合はtrue
      */
     private boolean hasRole(User user, String roleName) {
+        // プレフィックスの標準化
+        String normalizedRoleName = roleName.startsWith("ROLE_") ? roleName : "ROLE_" + roleName;
+        
+        // ロールの比較
         return user.getRoles().stream()
-                .anyMatch(role -> role.getName().equals(roleName));
+                .anyMatch(role -> {
+                    // ロール名の正規化（プレフィックスの処理）
+                    String actualPrefix = role.getPrefix() != null ? role.getPrefix() : "ROLE_";
+                    String actualName = role.getName().startsWith("ROLE_")
+                        ? role.getName().substring(5)
+                        : role.getName();
+                    
+                    String actualRoleName = actualPrefix + actualName;
+                    boolean matches = actualRoleName.equals(normalizedRoleName);
+                    
+                    logger.debug("ロールの比較: user={}, expected={}, actual={}, matches={}",
+                        user.getEmail(), normalizedRoleName, actualRoleName, matches);
+                    
+                    return matches;
+                });
     }
 
     /**
@@ -76,25 +94,38 @@ public class AccessControlService {
         }
 
         // 管理者は全てのユーザーを編集可能
-        if (hasRole(currentUser, "ADMIN")) {
+        if (hasRole(currentUser, "ROLE_ADMIN")) {
             logger.debug("管理者によるユーザー編集: target={}", targetUser.getEmail());
             return true;
         }
 
         // 管理補助者は一般ユーザーのみ編集可能
-        if (hasRole(currentUser, "MODERATOR") && hasRole(targetUser, "USER")) {
-            logger.debug("管理補助者によるユーザー編集: target={}", targetUser.getEmail());
-            return true;
+        if (hasRole(currentUser, "ROLE_MODERATOR")) {
+            if (hasRole(targetUser, "ROLE_USER")) {
+                logger.debug("管理補助者による一般ユーザーの編集: moderator={}, target={}",
+                    currentUser.getEmail(), targetUser.getEmail());
+                return true;
+            }
+            logger.warn("管理補助者による不正な編集試行: moderator={}, target={}, targetRoles={}",
+                currentUser.getEmail(), targetUser.getEmail(), targetUser.getRoles());
+            return false;
         }
 
         // 一般ユーザーは自分自身のみ編集可能
-        if (hasRole(currentUser, "USER") && currentUser.getId().equals(targetUser.getId())) {
-            logger.debug("ユーザーによる自身の編集: user={}", currentUser.getEmail());
-            return true;
+        if (hasRole(currentUser, "ROLE_USER")) {
+            boolean isSelf = currentUser.getId().equals(targetUser.getId());
+            if (isSelf) {
+                logger.debug("ユーザーによる自身の編集: user={}", currentUser.getEmail());
+                return true;
+            }
+            logger.warn("一般ユーザーによる他者の編集試行: user={}, target={}",
+                currentUser.getEmail(), targetUser.getEmail());
+            return false;
         }
 
-        logger.warn("不正なユーザー編集の試行: user={}, target={}", 
-                   currentUser.getEmail(), targetUser.getEmail());
+        logger.warn("不正なユーザー編集の試行: user={}, role={}, target={}, targetRole={}",
+            currentUser.getEmail(), currentUser.getRoles(),
+            targetUser.getEmail(), targetUser.getRoles());
         return false;
     }
 
@@ -128,19 +159,26 @@ public class AccessControlService {
         }
 
         // 管理者は全てのユーザーを削除可能
-        if (hasRole(currentUser, "ADMIN")) {
+        if (hasRole(currentUser, "ROLE_ADMIN")) {
             logger.info("管理者によるユーザー削除: target={}", targetUser.getEmail());
             return true;
         }
 
         // 管理補助者は一般ユーザーのみ削除可能
-        if (hasRole(currentUser, "MODERATOR") && hasRole(targetUser, "USER")) {
-            logger.info("管理補助者によるユーザー削除: target={}", targetUser.getEmail());
-            return true;
+        if (hasRole(currentUser, "ROLE_MODERATOR")) {
+            if (hasRole(targetUser, "ROLE_USER")) {
+                logger.info("管理補助者による一般ユーザーの削除: moderator={}, target={}",
+                    currentUser.getEmail(), targetUser.getEmail());
+                return true;
+            }
+            logger.warn("管理補助者による不正な削除試行: moderator={}, targetRoles={}",
+                currentUser.getEmail(), targetUser.getRoles());
+            return false;
         }
 
-        logger.warn("不正なユーザー削除の試行: user={}, target={}", 
-                   currentUser.getEmail(), targetUser.getEmail());
+        logger.warn("不正なユーザー削除の試行: user={}, userRoles={}, target={}, targetRoles={}",
+            currentUser.getEmail(), currentUser.getRoles(),
+            targetUser.getEmail(), targetUser.getRoles());
         return false;
     }
 
@@ -174,25 +212,30 @@ public class AccessControlService {
         }
 
         // 管理者は全ての役割のユーザーを表示可能
-        if (hasRole(currentUser, "ADMIN")) {
+        if (hasRole(currentUser, "ROLE_ADMIN")) {
             logger.debug("管理者によるユーザー一覧表示: role={}", role);
             return true;
         }
 
         // 管理補助者は一般ユーザーのみ表示可能
-        if (hasRole(currentUser, "MODERATOR") && role.equals("USER")) {
+        if (hasRole(currentUser, "ROLE_MODERATOR") && role.equals("ROLE_USER")) {
             logger.debug("管理補助者による一般ユーザー一覧表示");
             return true;
         }
 
         // 一般ユーザーは一般ユーザーのみ表示可能
-        if (hasRole(currentUser, "USER") && role.equals("USER")) {
-            logger.debug("一般ユーザーによる一般ユーザー一覧表示");
-            return true;
+        if (hasRole(currentUser, "ROLE_USER")) {
+            if (role.equals("ROLE_USER")) {
+                logger.debug("一般ユーザーによる一般ユーザー一覧表示: user={}", currentUser.getEmail());
+                return true;
+            } else {
+                logger.warn("一般ユーザーによる不正なロール表示の試行: user={}, requestedRole={}",
+                    currentUser.getEmail(), role);
+            }
         }
 
-        logger.warn("不正なユーザー一覧表示の試行: user={}, role={}",
-                   currentUser.getEmail(), role);
+        logger.warn("不正なユーザー一覧表示の試行: user={}, userRoles={}, requestedRole={}",
+            currentUser.getEmail(), currentUser.getRoles(), role);
         return false;
     }
 
@@ -211,13 +254,13 @@ public class AccessControlService {
         }
 
         // 管理者は全ての役割のユーザーを作成可能
-        if (hasRole(currentUser, "ADMIN")) {
+        if (hasRole(currentUser, "ROLE_ADMIN")) {
             logger.info("管理者によるユーザー作成: role={}", role);
             return true;
         }
 
         // 管理補助者は一般ユーザーのみ作成可能
-        if (hasRole(currentUser, "MODERATOR") && role.equals("USER")) {
+        if (hasRole(currentUser, "ROLE_MODERATOR") && role.equals("ROLE_USER")) {
             logger.info("管理補助者による一般ユーザー作成");
             return true;
         }
