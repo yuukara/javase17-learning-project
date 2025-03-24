@@ -1,7 +1,9 @@
 package com.example.javase17learningproject;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
@@ -101,8 +103,9 @@ public class UserController {
         .orElseThrow(() -> new RuntimeException("Role not found: " + role));
 
     // 既存のロールコレクションを操作
-    existingUser.getRoles().clear();
-    existingUser.getRoles().add(newRole);
+    Set<Role> newRoles = new HashSet<>();
+    newRoles.add(newRole);
+    existingUser.setRoles(newRoles);
     
     userRepository.save(existingUser);
     return "redirect:/users";

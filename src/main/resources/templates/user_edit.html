@@ -21,7 +21,7 @@
             <div class="form-group">
                 <label for="role">役割</label>
                 <select class="form-control" id="role" name="role">
-                    <option th:each="role : ${roles}" th:value="${role.id}" th:text="${role.name}" th:selected="${role == user.role}"></option>
+                    <option th:each="role : ${roles}" th:value="${role.name}" th:text="${role.name}" th:selected="${user.roles.contains(role)}"></option>
                 </select>
             </div>
             <button type="submit" class="btn btn-primary">保存</button>
