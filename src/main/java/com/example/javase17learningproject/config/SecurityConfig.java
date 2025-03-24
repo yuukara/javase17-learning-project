@@ -7,12 +7,15 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
@@ -51,10 +54,16 @@ public class SecurityConfig {
      *
      * @return BCryptPasswordEncoderのインスタンス
      */
+    private final PasswordEncoder passwordEncoder;
+
+    public SecurityConfig() {
+        this.passwordEncoder = new BCryptPasswordEncoder();
+    }
+
     @Bean
     @ConditionalOnMissingBean
     public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
+        return this.passwordEncoder;
     }
 
     /**
@@ -115,7 +124,7 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
             .authorizeHttpRequests(authz -> authz
-                .requestMatchers("/css/**", "/js/**", "/images/**", "/login").permitAll()
+                .requestMatchers("/css/**", "/js/**", "/images/**", "/login", "/").permitAll()
                 .requestMatchers("/h2-console/**").permitAll() // 開発環境用
                 .requestMatchers("/users/search").access((authentication, context) -> {
                     String role = context.getRequest().getParameter("role");
@@ -143,22 +152,29 @@ public class SecurityConfig {
                 .failureHandler(authenticationFailureHandler())
             )
             .logout(logout -> logout
+                .logoutUrl("/logout")
+                .logoutSuccessUrl("/login?logout")
+                .invalidateHttpSession(true)
+                .deleteCookies("JSESSIONID")
                 .permitAll()
                 .logoutSuccessHandler(logoutSuccessHandler())
             )
             .exceptionHandling(exceptions -> exceptions
                 .accessDeniedHandler(accessDeniedHandler())
             )
+            // CSRF設定
             .csrf(csrf -> csrf
                 .ignoringRequestMatchers("/h2-console/**") // 開発環境用
             )
+            // H2コンソール用設定
             .headers(headers -> headers
-                .frameOptions(frame -> frame
-                    .sameOrigin() // H2コンソール用
-                )
+                .frameOptions(frame -> frame.sameOrigin())
             )
-            .userDetailsService(userDetailsService) // カスタムUserDetailsServiceを設定
-           .addFilterBefore(new EnhancedAccessControlDebugFilter(accessControlService), UsernamePasswordAuthenticationFilter.class);
+            // セキュリティフィルター設定
+            .userDetailsService(userDetailsService)
+            .authenticationProvider(authenticationProvider())
+            .addFilterBefore(new EnhancedAccessControlDebugFilter(accessControlService),
+                UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
 
@@ -176,9 +192,41 @@ public class SecurityConfig {
      */
     @Bean
     public DaoAuthenticationProvider authenticationProvider() {
-        DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
+        DaoAuthenticationProvider provider = new DaoAuthenticationProvider() {
+            protected void additionalAuthenticationChecks(UserDetails userDetails,
+                    UsernamePasswordAuthenticationToken authentication) throws BadCredentialsException {
+                if (authentication.getCredentials() == null) {
+                    logger.debug("認証失敗: 資格情報がnullです");
+                    throw new BadCredentialsException("Bad credentials");
+                }
+                // 入力されたパスワードをログ出力
+                String presentedPassword = authentication.getCredentials().toString();
+                // ここでエンコードするのはログ表示のためだけであり、実際の比較にはpresentedPassword（平文）を使用すべき
+                logger.info("入力されたパスワード（平文）: " + presentedPassword);
+                logger.info("データベースのパスワード: " + userDetails.getPassword());
+                
+                // パスワードの一致を確認
+                boolean matches = SecurityConfig.this.passwordEncoder.matches(presentedPassword, userDetails.getPassword());
+                logger.info("パスワードの一致確認: " + matches);
+                
+                // ユーザーステータスの確認
+                logger.info("アカウント有効: " + userDetails.isEnabled());
+                logger.info("アカウントロック状態: " + (!userDetails.isAccountNonLocked()));
+                logger.info("アカウント有効期限: " + userDetails.isAccountNonExpired());
+                logger.info("認証情報有効期限: " + userDetails.isCredentialsNonExpired());
+                
+                try {
+                    // 親クラスの認証チェックを実行
+                    super.additionalAuthenticationChecks(userDetails, authentication);
+                    logger.info("認証チェック成功");
+                } catch (BadCredentialsException e) {
+                    logger.error("認証チェック失敗: " + e.getMessage());
+                    throw e;
+                }
+            }
+        };
         provider.setUserDetailsService(userDetailsService);
-        provider.setPasswordEncoder(passwordEncoder());
+        provider.setPasswordEncoder(this.passwordEncoder);
         return provider;
     }
 }

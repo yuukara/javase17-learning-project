@@ -25,11 +25,16 @@ public class CustomUserDetailsService implements UserDetailsService {
     @Override
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
         logger.debug("ユーザー認証を試行: {}", email);
-        
-        return userRepository.findByEmail(email)
+
+        var user = userRepository.findByEmail(email)
                 .orElseThrow(() -> {
                     logger.warn("ユーザーが見つかりません: {}", email);
                     return new UsernameNotFoundException("ユーザーが見つかりません: " + email);
                 });
+
+        // デバッグ用：パスワード情報をログ出力
+        logger.info("データベースのパスワード: {}", user.getPassword());
+        
+        return user;
     }
 }

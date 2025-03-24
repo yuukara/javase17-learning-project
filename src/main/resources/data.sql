@@ -7,7 +7,7 @@ INSERT INTO roles (id, name, prefix) VALUES (3, 'MODERATOR', 'ROLE_');
 -- 管理者ユーザーの初期データ
 -- パスワード: admin123 (BCryptでハッシュ化済み)
 INSERT INTO users (id, name, email, password, account_non_expired, account_non_locked, credentials_non_expired, enabled, created_at, updated_at)
-VALUES (1, 'admin', 'admin@example.com', '$2a$10$6HKTFSpDkoI8zr3ZJUKeKuHU8ZOK5QyeBxKSx3Ru9TAkoT1c8WN.K',
+VALUES (1, 'admin', 'admin@example.com', '$2a$10$LhtAWAu9BQ1AiZ0tPWcmj.plNIPuTia48QFpcPvn5lMVw.Srbriv.',
 true, true, true, true, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP());
 
 -- 管理者ユーザーにADMIN役割を割り当て
