@@ -1,74 +1,46 @@
-# 設計書
+### 11.2. 監査ログ機能の実装方針
 
-## 1. プロジェクト概要
+1. **2段階での実装**:
+   * Phase 1: recordを使用したインメモリでの監査ログ（Java 17機能学習） ← 完了
+     - [x] AuditLogレコードクラス: 実装完了
+       * 不変性の確保
+       * イベントタイプと重要度の定義
+       * コンパクトコンストラクタによるバリデーション
+     - [x] インメモリでのログ保持: ConcurrentHashMapで実装完了
+       * スレッドセーフな操作
+       * AtomicLongによるID生成
+       * 最新ログ・イベントタイプによる検索
+     - [x] AOPによる自動ログ記録: 実装完了
+       * @Auditedアノテーション
+       * AuditAspectによる処理
+       * Spring Securityとの統合
+     - [x] テスト: 実装完了
+       * インメモリストレージ（5テストケース）
+       * アスペクト（3テストケース）
+       * 並行アクセス
+   * Phase 2: データベースへの永続化（将来の拡張）
+     - [ ] エンティティ設計
+     - [ ] JPA実装
+     - [ ] 変換層実装
 
-このプロジェクトは、Java 17とSpring Bootを使用して構築された、ユーザー管理アプリケーションです。Java SE 17の新機能を活用しながら、ユーザーのCRUD操作（作成、読み取り、更新、削除）をAPI経由で提供し、Thymeleafテンプレートを使用してユーザー一覧を表示します。Spring Securityを使用して認証・認可機能を実装しています。
+2. **実装の詳細**:
+   * インメモリストレージの特徴:
+     - ConcurrentHashMapによる高速アクセス
+     - スレッドセーフな実装
+     - メモリ使用量の制御（今後の課題）
+   * AOPの特徴:
+     - アノテーションベースの設定
+     - メソッドレベルの監査
+     - 柔軟なイベントタイプ定義
 
-## 2. 機能
-
-*   ユーザー一覧の表示
-*   ユーザーの追加
-*   ユーザーの詳細表示
-*   ユーザーの編集
-*   ユーザーの削除
-*   **ユーザー役割管理**
-    *   ユーザーに対して役割を設定・変更
-    *   役割に応じた操作の可否をチェック
-*   **ユーザー検索**
-    *   ユーザー名、メールアドレス、役割などの条件でユーザーを検索できる。
-    *   検索条件は複数指定できる。
-    *   検索結果は、一覧画面に表示する。
-    *   検索結果がない場合は、その旨を表示する。
-
-## 3. クラス構成
-
-*   `Javase17learningprojectApplication`: アプリケーションのエントリーポイント。
-*   `User`: ユーザーエンティティ。`UserDetails`インターフェースを実装。
-    *   `id`: ユーザーID (Long)
-    *   `name`: ユーザー名 (String)
-        * バリデーション: `@NotBlank`, `@Size(min = 2, max = 100)`
-        * nullable = false
-    *   `email`: メールアドレス (String)
-        * バリデーション: `@NotBlank`, `@Email`
-        * nullable = false, unique = true
-    *   `password`: パスワード (String)
-        * バリデーション: `@NotBlank`, `@Size(min = 8)`
-        * nullable = false
-        * BCryptPasswordEncoderでハッシュ化して保存
-        * 既にBCryptでエンコードされている場合は再エンコードしない
-    *   `roles`: ユーザーの役割セット (Set<Role>)
-        * バリデーション: `@NotEmpty`
-        * `@ManyToMany(fetch = FetchType.EAGER)`で即時読み込み
-        * user_rolesテーブルで中間テーブルを使用
-    *   `createdAt`: 作成日時 (LocalDateTime)
-        * `@PrePersist`で自動設定
-    *   `updatedAt`: 更新日時 (LocalDateTime)
-        * `@PrePersist`と`@PreUpdate`で自動更新
-    *   Spring Security関連フィールド:
-        * `accountNonExpired`: アカウントの有効期限（デフォルトtrue）
-        * `accountNonLocked`: アカウントのロック状態（デフォルトtrue）
-        * `credentialsNonExpired`: 認証情報の有効期限（デフォルトtrue）
-        * `enabled`: アカウントの有効状態（デフォルトtrue）
-    *   メソッド:
-        * `getAuthorities()`: ユーザーの権限を返却
-        * `equals()`, `hashCode()`: IDベースの比較
-        * `toString()`: パスワードを除外したオブジェクト文字列化
-*   `Role`: 役割エンティティ。
-    *   `id`: 役割ID (Long)
-    *   `name`: 役割名 (String) (`USER`, `ADMIN`, `MODERATOR`)
-        * unique制約
-*   `UserRepository`: ユーザーリポジトリ。`JpaRepository<User, Long>`を継承。
-    *   `findByRoles`: 指定された役割を持つユーザーを検索
-    *   `findByNameContaining`: 指定された名前を含むユーザーを検索
-    *   `findByEmail`: 指定されたメールアドレスを持つユーザーを検索
-    *   `searchUsers`: ユーザー名、メールアドレス、役割で検索（nullの条件は無視）
-*   `RoleRepository`: 役割リポジトリ。`JpaRepository<Role, Long>`を継承。
-    *   `findByName`: 指定された名前の役割を検索
-*   `AccessControlService`: アクセス制御サービス。ユーザーの役割に基づいて操作の可否を判断。
-    *   `canEditUser(User)`: 現在のユーザーが指定されたユーザーを編集できるか判断
-    *   `canEditUser(Long)`: 指定されたIDのユーザーを編集できるか判断
-    *   `canDeleteUser(User)`: 現在のユーザーが指定されたユーザーを削除できるか判断
-    *   `canDeleteUser(Long)`: 指定されたIDのユーザーを削除できるか判断
+3. **今後の課題**:
+   * Phase 1の改善:
+     - キャッシュサイズの制限実装
+     - ログローテーション方式の確立
+     - パフォーマンス最適化
+   * Phase 2への準備:
+     - データベーススキーマの詳細設計
+     - 移行戦略の策定
     *   `canViewUsersByRole(String)`: 指定された役割のユーザー一覧を表示できるか判断
     *   `canCreateUserWithRole(String)`: 指定された役割でユーザーを作成できるか判断
     *   アクセス制御ルール:
