@@ -13,12 +13,12 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.context.annotation.Import;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.example.javase17learningproject.config.TestConfig;
 import com.example.javase17learningproject.model.Role;
 import com.example.javase17learningproject.model.User;
+import com.example.javase17learningproject.service.PasswordEncodingService;
 
 @DataJpaTest
 @Import(TestConfig.class)
@@ -34,7 +34,7 @@ class UserRepositoryTest {
     private RoleRepository roleRepository;
 
     @Autowired
-    private BCryptPasswordEncoder passwordEncoder;
+    private PasswordEncodingService passwordEncodingService;
 
     private Role userRole;
     private Role adminRole;
@@ -129,7 +129,7 @@ class UserRepositoryTest {
     }
 
     @Test
-    void testSearchByRole() {
+    void testFindByRoles() {
         // テストデータの準備
         User user1 = createUser("testUser1", userRole);
         User user2 = createUser("testUser2", adminRole);
@@ -137,12 +137,33 @@ class UserRepositoryTest {
         userRepository.saveAll(List.of(user1, user2, user3));
 
         // 検索の実行
-        List<User> userRoleUsers = userRepository.findByRoles("ROLE_USER");
-        List<User> adminRoleUsers = userRepository.findByRoles("ROLE_ADMIN");
+        List<User> userRoleUsers = userRepository.findByRoles(userRole);
+        List<User> adminRoleUsers = userRepository.findByRoles(adminRole);
 
         // 検証
         assertThat(userRoleUsers).extracting("name").containsExactlyInAnyOrder("testUser1", "testUser3");
         assertThat(adminRoleUsers).extracting("name").containsExactlyInAnyOrder("testUser2");
+    }
+
+    @Test
+    void testSearchUsers() {
+        // テストデータの準備
+        User user1 = createUser("testUser1", userRole);
+        User user2 = createUser("testUser2", adminRole);
+        User user3 = createUser("testUser3", userRole);
+        userRepository.saveAll(List.of(user1, user2, user3));
+
+        // 名前での検索
+        List<User> usersWithTest = userRepository.searchUsers("test", null, null);
+        assertThat(usersWithTest).hasSize(3);
+
+        // ロールでの検索
+        List<User> userRoleUsers = userRepository.searchUsers(null, null, userRole);
+        assertThat(userRoleUsers).extracting("name").containsExactlyInAnyOrder("testUser1", "testUser3");
+
+        // 複合条件での検索
+        List<User> test2AdminUsers = userRepository.searchUsers("2", null, adminRole);
+        assertThat(test2AdminUsers).extracting("name").containsExactly("testUser2");
     }
 
     private User createUser(String name, Role role) {
@@ -150,7 +171,7 @@ class UserRepositoryTest {
         user.setName(name);
         // メールアドレスをユニークにするため、タイムスタンプを追加
         user.setEmail(name.toLowerCase() + System.currentTimeMillis() + "@example.com");
-        user.setPassword(passwordEncoder.encode("password123"));
+        user.setPassword(passwordEncodingService.encodePassword("password123"));
         user.setRoles(Set.of(role));
         return user;
     }

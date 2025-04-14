@@ -35,6 +35,8 @@ import jakarta.validation.constraints.Size;
 @Table(name = "users")
 public class User implements UserDetails {
 
+    private static final BCryptPasswordEncoder PASSWORD_ENCODER = new BCryptPasswordEncoder();
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -111,22 +113,9 @@ public class User implements UserDetails {
         return password;
     }
 
-    /**
-     * パスワードを設定します。
-     * BCryptでエンコードされていない場合のみエンコードを行います。
-     * 
-     * @param password 設定するパスワード（平文またはエンコード済み）
-     */
     public void setPassword(String password) {
-        if (password == null) {
-            return;
-        }
-        // BCryptエンコード済みかどうかをチェック
-        if (password.startsWith("$2a$") || password.startsWith("$2b$") || password.startsWith("$2y$")) {
-            this.password = password;  // エンコード済みの場合はそのまま設定
-        } else {
-            this.password = new BCryptPasswordEncoder().encode(password);  // 平文の場合はエンコード
-        }
+        // パスワードをBCryptでエンコードして保存
+        this.password = PASSWORD_ENCODER.encode(password);
     }
 
     public Set<Role> getRoles() {
@@ -223,6 +212,23 @@ public class User implements UserDetails {
     @Override
     public int hashCode() {
         return id == null ? 31 : id.hashCode();
+    }
+
+    // Security-related setters
+    public void setEnabled(boolean enabled) {
+        this.enabled = enabled;
+    }
+
+    public void setAccountNonExpired(boolean accountNonExpired) {
+        this.accountNonExpired = accountNonExpired;
+    }
+
+    public void setAccountNonLocked(boolean accountNonLocked) {
+        this.accountNonLocked = accountNonLocked;
+    }
+
+    public void setCredentialsNonExpired(boolean credentialsNonExpired) {
+        this.credentialsNonExpired = credentialsNonExpired;
     }
 
     @Override

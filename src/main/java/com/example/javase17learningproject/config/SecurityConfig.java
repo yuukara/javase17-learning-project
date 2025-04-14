@@ -27,6 +27,7 @@ import org.springframework.security.web.authentication.logout.LogoutSuccessHandl
 
 import com.example.javase17learningproject.service.AccessControlService;
 import com.example.javase17learningproject.service.CustomUserDetailsService;
+import com.example.javase17learningproject.service.PasswordEncodingService;
 
 import jakarta.servlet.http.HttpServletResponse;
 
@@ -48,22 +49,13 @@ public class SecurityConfig {
     @Autowired
     private CustomUserDetailsService userDetailsService;
 
-    /**
-     * パスワードエンコーダーのBeanを定義します。
-     * BCryptアルゴリズムを使用してパスワードをハッシュ化します。
-     *
-     * @return BCryptPasswordEncoderのインスタンス
-     */
-    private final PasswordEncoder passwordEncoder;
-
-    public SecurityConfig() {
-        this.passwordEncoder = new BCryptPasswordEncoder();
-    }
+    @Autowired
+    private PasswordEncodingService passwordEncodingService;
 
     @Bean
     @ConditionalOnMissingBean
     public PasswordEncoder passwordEncoder() {
-        return this.passwordEncoder;
+        return new BCryptPasswordEncoder();
     }
 
     /**
@@ -204,15 +196,19 @@ public class SecurityConfig {
                 // ここでエンコードするのはログ表示のためだけであり、実際の比較にはpresentedPassword（平文）を使用すべき
                 logger.info("入力されたパスワード（平文）: " + presentedPassword);
                 logger.info("データベースのパスワード: " + userDetails.getPassword());
-                
                 // パスワードの一致を確認
-                boolean matches = SecurityConfig.this.passwordEncoder.matches(presentedPassword, userDetails.getPassword());
+                boolean matches = passwordEncodingService.matches(presentedPassword, userDetails.getPassword());
                 logger.info("パスワードの一致確認: " + matches);
                 
+                if (!matches) {
+                    throw new BadCredentialsException("パスワードが一致しません");
+                }
+
                 // ユーザーステータスの確認
                 logger.info("アカウント有効: " + userDetails.isEnabled());
                 logger.info("アカウントロック状態: " + (!userDetails.isAccountNonLocked()));
                 logger.info("アカウント有効期限: " + userDetails.isAccountNonExpired());
+                logger.info("認証情報有効期限: " + userDetails.isCredentialsNonExpired());
                 logger.info("認証情報有効期限: " + userDetails.isCredentialsNonExpired());
                 
                 try {
@@ -226,7 +222,7 @@ public class SecurityConfig {
             }
         };
         provider.setUserDetailsService(userDetailsService);
-        provider.setPasswordEncoder(this.passwordEncoder);
+        provider.setPasswordEncoder(passwordEncoder());
         return provider;
     }
 }

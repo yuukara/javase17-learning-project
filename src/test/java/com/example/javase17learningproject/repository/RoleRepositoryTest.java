@@ -1,4 +1,4 @@
-package com.example.javase17learningproject;
+package com.example.javase17learningproject.repository;
 
 import java.util.List;
 import java.util.Optional;
@@ -12,7 +12,6 @@ import org.springframework.test.context.jdbc.Sql;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.example.javase17learningproject.model.Role;
-import com.example.javase17learningproject.repository.RoleRepository;
 
 /**
  * RoleRepositoryのテストクラス。

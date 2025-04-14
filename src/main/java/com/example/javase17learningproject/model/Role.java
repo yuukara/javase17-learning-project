@@ -9,7 +9,7 @@ import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotBlank;
 
 /**
- * ユーザーの役割を表すエンティティクラス。
+ * ユーザーロールを表すエンティティクラス。
  */
 @Entity
 @Table(name = "roles")
@@ -33,6 +33,7 @@ public class Role {
         this.name = name;
     }
 
+    // Getters and Setters
     public Long getId() {
         return id;
     }

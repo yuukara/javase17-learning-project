@@ -27,6 +27,7 @@ import com.example.javase17learningproject.model.Role;
 import com.example.javase17learningproject.model.User;
 import com.example.javase17learningproject.repository.RoleRepository;
 import com.example.javase17learningproject.repository.UserRepository;
+import com.example.javase17learningproject.service.PasswordEncodingService;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -46,6 +47,9 @@ public class SecurityConfigTest {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
+    @Autowired
+    private PasswordEncodingService passwordEncodingService;
+
     private Long userId;
     private static final String TEST_PASSWORD = "password123";
     private String encodedPassword;
@@ -57,7 +61,7 @@ public class SecurityConfigTest {
         userRepository.deleteAll();
         roleRepository.deleteAll();
 
-        encodedPassword = passwordEncoder.encode(TEST_PASSWORD);
+        encodedPassword = passwordEncodingService.encodePassword(TEST_PASSWORD);
         logger.info("テストパスワード: {}", TEST_PASSWORD);
         logger.info("エンコード後パスワード: {}", encodedPassword);
 
@@ -174,9 +178,9 @@ public class SecurityConfigTest {
         assertNotNull(user, "ユーザーがデータベースに存在する必要があります");
         logger.info("認証前の保存パスワード: {}", user.getPassword());
         logger.info("認証用パスワード（平文）: {}", TEST_PASSWORD);
-        logger.info("パスワード一致確認: {}", passwordEncoder.matches(TEST_PASSWORD, user.getPassword()));
+        logger.info("パスワード一致確認: {}", passwordEncodingService.matches(TEST_PASSWORD, user.getPassword()));
 
-        assertTrue(passwordEncoder.matches(TEST_PASSWORD, user.getPassword()), 
+        assertTrue(passwordEncodingService.matches(TEST_PASSWORD, user.getPassword()),
                   "パスワードが正しくエンコードされている必要があります");
 
         MockHttpSession session = login("admin@example.com", TEST_PASSWORD);
@@ -220,9 +224,9 @@ public class SecurityConfigTest {
         assertNotNull(user.getPassword(), "パスワードが設定されている必要があります");
         
         logger.info("保存されているパスワード: {}", user.getPassword());
-        logger.info("パスワード一致確認: {}", passwordEncoder.matches(TEST_PASSWORD, user.getPassword()));
+        logger.info("パスワード一致確認: {}", passwordEncodingService.matches(TEST_PASSWORD, user.getPassword()));
         
-        assertTrue(passwordEncoder.matches(TEST_PASSWORD, user.getPassword()), 
+        assertTrue(passwordEncodingService.matches(TEST_PASSWORD, user.getPassword()),
                   "パスワードが正しくエンコードされている必要があります");
         
         MockHttpSession session = login("admin@example.com", TEST_PASSWORD);
