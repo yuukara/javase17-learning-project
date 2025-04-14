@@ -6,46 +6,37 @@ import java.util.Optional;
 import com.example.javase17learningproject.model.AuditLog;
 
 /**
- * 監査ログのインメモリストレージのインターフェース。
- * Phase 1での基本的なログ管理機能を提供します。
+ * 監査ログのインメモリストレージを提供するインターフェース。
  */
 public interface AuditLogInMemoryStorage {
+
     /**
      * 監査ログを保存します。
-     *
-     * @param log 保存する監査ログ
-     * @return 保存された監査ログ
      */
     AuditLog save(AuditLog log);
 
     /**
-     * 最新のログをLimit件数取得します。
-     *
-     * @param limit 取得する件数
-     * @return 最新の監査ログのリスト
-     */
-    List<AuditLog> findLatestLogs(int limit);
-
-    /**
-     * 指定されたイベントタイプの監査ログを取得します。
-     *
-     * @param eventType イベントタイプ
-     * @return 該当する監査ログのリスト
-     */
-    List<AuditLog> findByEventType(String eventType);
-
-    /**
-     * IDで監査ログを検索します。
-     *
-     * @param id 監査ログID
-     * @return 該当する監査ログ（存在しない場合はEmpty）
+     * 指定されたIDの監査ログを取得します。
      */
     Optional<AuditLog> findById(Long id);
 
     /**
+     * イベントタイプに基づいて監査ログを検索します。
+     */
+    List<AuditLog> findByEventType(String eventType);
+
+    /**
+     * 最新の監査ログを指定された件数取得します。
+     */
+    List<AuditLog> findLatestLogs(int limit);
+
+    /**
      * 全ての監査ログを取得します。
-     *
-     * @return 全ての監査ログのリスト
      */
     List<AuditLog> findAll();
+
+    /**
+     * メモリ内の全ての監査ログを削除します。
+     */
+    void clear();
 }

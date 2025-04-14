@@ -2,122 +2,74 @@ package com.example.javase17learningproject.service;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import com.example.javase17learningproject.model.AuditLog;
-import com.example.javase17learningproject.model.audit.AuditEvent;
 import com.example.javase17learningproject.model.audit.AuditEvent.Severity;
-import com.example.javase17learningproject.repository.AuditLogRepository;
 
 /**
- * 監査ログのサービスクラス。
- * 監査ログの記録と検索機能を提供します。
+ * 監査ログのビジネスロジックを提供するサービス。
  */
-@Service
-public class AuditLogService {
-
-    private final AuditLogRepository auditLogRepository;
-
-    @Autowired
-    public AuditLogService(AuditLogRepository auditLogRepository) {
-        this.auditLogRepository = auditLogRepository;
-    }
+public interface AuditLogService {
 
     /**
-     * 監査イベントを記録します。
+     * 監査ログを保存します。
+     * メモリキャッシュとデータベースの両方に保存されます。
      */
-    @Transactional
-    public AuditLog logEvent(AuditEvent event, Long userId, Long targetId, String description) {
-        return auditLogRepository.save(new AuditLog(
-            null,
-            event.getType(),
-            event.getSeverity(),
-            userId,
-            targetId,
-            description,
-            LocalDateTime.now()
-        ));
-    }
+    AuditLog save(AuditLog log);
 
     /**
-     * イベントタイプで監査ログを検索します。
+     * 指定されたIDの監査ログを取得します。
+     * まずメモリキャッシュを確認し、存在しない場合はデータベースから取得します。
      */
-    @Transactional(readOnly = true)
-    public List<AuditLog> findByEventType(String eventType) {
-        return auditLogRepository.findByEventType(eventType);
-    }
+    AuditLog findById(Long id);
 
     /**
-     * ユーザーIDで監査ログを検索します。
+     * 指定された条件で監査ログを検索します。
      */
-    @Transactional(readOnly = true)
-    public List<AuditLog> findByUserId(Long userId) {
-        return auditLogRepository.findByUserId(userId);
-    }
+    Page<AuditLog> searchLogs(
+        String eventType,
+        Severity severity,
+        Long userId,
+        LocalDateTime startDate,
+        LocalDateTime endDate,
+        Pageable pageable
+    );
 
     /**
-     * 指定された重要度以上の監査ログを検索します。
+     * 最近の監査ログを取得します。
+     * メモリキャッシュから直接取得するため、高速です。
      */
-    @Transactional(readOnly = true)
-    public List<AuditLog> findBySeverityGreaterThanEqual(Severity minSeverity) {
-        return auditLogRepository.findBySeverityGreaterThanEqual(minSeverity);
-    }
+    List<AuditLog> findLatestLogs(int limit);
 
     /**
-     * 期間を指定して監査ログを検索します。
+     * 指定された日付より古い監査ログをアーカイブし、
+     * データベースから削除します。
      */
-    @Transactional(readOnly = true)
-    public List<AuditLog> findByDateRange(LocalDateTime startDateTime, LocalDateTime endDateTime) {
-        return auditLogRepository.findByDateRange(startDateTime, endDateTime);
-    }
+    void archiveOldLogs(LocalDateTime before);
 
     /**
-     * 最新の監査ログを取得します。
+     * インメモリストレージのログをデータベースに移行します。
+     * 移行完了後、インメモリストレージはクリアされます。
      */
-    @Transactional(readOnly = true)
-    public List<AuditLog> getLatestLogs(int limit) {
-        return auditLogRepository.findLatestLogs(limit);
-    }
+    void migrateToDatabase();
 
     /**
-     * 対象IDに関する監査ログを検索します。
+     * メモリキャッシュをクリアし、最新のデータで再構築します。
      */
-    @Transactional(readOnly = true)
-    public List<AuditLog> findByTargetId(Long targetId) {
-        return auditLogRepository.findByTargetId(targetId);
-    }
+    void refreshCache();
 
     /**
-     * 指定された重要度と期間の監査ログを検索します。
+     * 指定された期間の監査ログを集計します。
+     * @return イベントタイプごとの件数
      */
-    @Transactional(readOnly = true)
-    public List<AuditLog> findBySeverityAndDateRange(
-            Severity minSeverity, 
-            LocalDateTime startDateTime, 
-            LocalDateTime endDateTime) {
-        return auditLogRepository.findBySeverityAndDateRange(
-            minSeverity, startDateTime, endDateTime);
-    }
+    Map<String, Long> aggregateByEventType(LocalDateTime start, LocalDateTime end);
 
     /**
-     * 重大なイベントを検索します（重要度HIGH以上）。
+     * 重要度レベルごとの監査ログ件数を取得します。
      */
-    @Transactional(readOnly = true)
-    public List<AuditLog> findCriticalEvents() {
-        return auditLogRepository.findBySeverityGreaterThanEqual(Severity.HIGH);
-    }
-
-    /**
-     * 指定された期間内の重大なイベントを検索します。
-     */
-    @Transactional(readOnly = true)
-    public List<AuditLog> findCriticalEventsInDateRange(
-            LocalDateTime startDateTime, 
-            LocalDateTime endDateTime) {
-        return auditLogRepository.findBySeverityAndDateRange(
-            Severity.HIGH, startDateTime, endDateTime);
-    }
+    Map<Severity, Long> countBySeverity(LocalDateTime start, LocalDateTime end);
 }
