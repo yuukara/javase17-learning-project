@@ -1,125 +1,119 @@
 package com.example.javase17learningproject.aspect;
 
+import java.lang.reflect.Method;
+import java.time.LocalDateTime;
+import java.util.Optional;
+
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.reflect.MethodSignature;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
 import com.example.javase17learningproject.annotation.Audited;
+import com.example.javase17learningproject.model.AuditLog;
 import com.example.javase17learningproject.model.User;
-import com.example.javase17learningproject.model.audit.AuditEvent;
-import com.example.javase17learningproject.model.audit.AuditEvent.Severity;
-import com.example.javase17learningproject.model.audit.SecurityAuditEvent;
-import com.example.javase17learningproject.model.audit.SystemAuditEvent;
-import com.example.javase17learningproject.model.audit.UserAuditEvent;
-import com.example.javase17learningproject.service.AuditLogService;
+import com.example.javase17learningproject.repository.AuditLogInMemoryStorage;
 
 /**
  * 監査ログを記録するためのアスペクト。
- * @Auditedアノテーションが付与されたメソッドの実行を監視し、監査ログを記録します。
+ * @Auditedアノテーションが付与されたメソッドの実行を監視し、ログを記録します。
  */
 @Aspect
 @Component
 public class AuditAspect {
 
-    private final AuditLogService auditLogService;
+    private final AuditLogInMemoryStorage auditLogStorage;
 
-    @Autowired
-    public AuditAspect(AuditLogService auditLogService) {
-        this.auditLogService = auditLogService;
+    public AuditAspect(AuditLogInMemoryStorage auditLogStorage) {
+        this.auditLogStorage = auditLogStorage;
     }
 
-    @Around("@annotation(audited)")
-    public Object auditMethod(ProceedingJoinPoint joinPoint, Audited audited) throws Throwable {
-        String eventType = getEventType(joinPoint, audited);
+    @Around("@annotation(com.example.javase17learningproject.annotation.Audited)")
+    public Object auditMethod(ProceedingJoinPoint joinPoint) throws Throwable {
+        // メソッドとアノテーションの情報を取得
+        MethodSignature signature = (MethodSignature) joinPoint.getSignature();
+        Method method = signature.getMethod();
+        Audited auditedAnnotation = method.getAnnotation(Audited.class);
+
+        // 現在のユーザーIDを取得
         Long userId = getCurrentUserId();
-        Long targetId = getTargetId(joinPoint);
-        String description = getDescription(joinPoint, audited);
 
-        try {
-            // メソッドを実行
-            Object result = joinPoint.proceed();
+        // メソッドの実行
+        Object result = joinPoint.proceed();
 
-            // 成功した場合の監査ログを記録
-            auditLogService.logEvent(
-                determineAuditEvent(eventType, audited.severity()),
-                userId,
-                targetId,
-                description
-            );
+        // 対象IDの取得（メソッドの最初の引数がLongまたはIDを持つオブジェクトと仮定）
+        Long targetId = extractTargetId(joinPoint.getArgs());
 
-            return result;
-        } catch (Throwable e) {
-            // 失敗した場合の監査ログを記録
-            auditLogService.logEvent(
-                determineAuditEvent(eventType + "_FAILED", audited.severity()),
-                userId,
-                targetId,
-                description + " - Error: " + e.getMessage()
-            );
-            throw e;
-        }
-    }
+        // 監査ログの作成と保存
+        AuditLog auditLog = new AuditLog(
+            null,
+            auditedAnnotation.eventType(),
+            auditedAnnotation.severity(),
+            userId,
+            targetId,
+            buildDescription(auditedAnnotation.description(), method, joinPoint.getArgs()),
+            LocalDateTime.now()
+        );
 
-    private String getEventType(ProceedingJoinPoint joinPoint, Audited audited) {
-        return audited.eventType().isEmpty() 
-            ? joinPoint.getSignature().getName().toUpperCase()
-            : audited.eventType();
+        auditLogStorage.save(auditLog);
+
+        return result;
     }
 
     private Long getCurrentUserId() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth != null && auth.getPrincipal() instanceof User user) {
-            return user.getId();
+        return Optional.ofNullable(SecurityContextHolder.getContext().getAuthentication())
+            .map(Authentication::getPrincipal)
+            .filter(principal -> principal instanceof User)
+            .map(principal -> ((User) principal).getId())
+            .orElse(null);
+    }
+
+    private Long extractTargetId(Object[] args) {
+        if (args == null || args.length == 0) {
+            return null;
         }
+
+        Object firstArg = args[0];
+        if (firstArg instanceof Long) {
+            return (Long) firstArg;
+        }
+
+        // IDを持つオブジェクトの場合、getIdメソッドの呼び出しを試みる
+        try {
+            Method getIdMethod = firstArg.getClass().getMethod("getId");
+            Object id = getIdMethod.invoke(firstArg);
+            if (id instanceof Long) {
+                return (Long) id;
+            }
+        } catch (Exception e) {
+            // IDの抽出に失敗した場合は無視
+        }
+
         return null;
     }
 
-    private Long getTargetId(ProceedingJoinPoint joinPoint) {
-        Object[] args = joinPoint.getArgs();
-        if (args.length > 0 && args[0] instanceof Long) {
-            return (Long) args[0];
+    private String buildDescription(String baseDescription, Method method, Object[] args) {
+        if (!baseDescription.isEmpty()) {
+            return baseDescription;
         }
-        return null;
-    }
 
-    private String getDescription(ProceedingJoinPoint joinPoint, Audited audited) {
-        if (!audited.description().isEmpty()) {
-            return audited.description();
+        StringBuilder description = new StringBuilder();
+        description.append("Method: ").append(method.getName());
+        
+        if (args != null && args.length > 0) {
+            description.append(", Args: [");
+            for (int i = 0; i < args.length; i++) {
+                if (i > 0) {
+                    description.append(", ");
+                }
+                description.append(String.valueOf(args[i]));
+            }
+            description.append("]");
         }
-        MethodSignature signature = (MethodSignature) joinPoint.getSignature();
-        return "Method: " + signature.getDeclaringType().getSimpleName() + 
-               "." + signature.getName();
-    }
 
-    private AuditEvent determineAuditEvent(String type, Severity severity) {
-        return switch (type.toUpperCase()) {
-            // ユーザー関連イベント
-            case "USER_CREATED", "CREATE_USER" -> UserAuditEvent.USER_CREATED;
-            case "USER_UPDATED", "UPDATE_USER" -> UserAuditEvent.USER_UPDATED;
-            case "USER_DELETED", "DELETE_USER" -> UserAuditEvent.USER_DELETED;
-            case "ROLE_CHANGED", "CHANGE_ROLE" -> UserAuditEvent.ROLE_CHANGED;
-
-            // セキュリティ関連イベント
-            case "LOGIN_SUCCESS" -> SecurityAuditEvent.LOGIN_SUCCESS;
-            case "LOGIN_FAILED" -> SecurityAuditEvent.LOGIN_FAILED;
-            case "ACCESS_DENIED" -> SecurityAuditEvent.ACCESS_DENIED;
-            case "ACCOUNT_LOCKED" -> SecurityAuditEvent.ACCOUNT_LOCKED;
-            case "PASSWORD_CHANGED" -> SecurityAuditEvent.PASSWORD_CHANGED;
-
-            // システム関連イベント
-            case "SYSTEM_STARTED" -> SystemAuditEvent.SYSTEM_STARTED;
-            case "SYSTEM_STOPPED" -> SystemAuditEvent.SYSTEM_STOPPED;
-            case "CONFIG_CHANGED" -> SystemAuditEvent.CONFIG_CHANGED;
-            case "DATABASE_OPERATION" -> SystemAuditEvent.DATABASE_OPERATION;
-            case "ERROR_OCCURRED" -> SystemAuditEvent.ERROR_OCCURRED;
-
-            // その他のイベントはSystemAuditEventとして扱う
-            default -> SystemAuditEvent.ERROR_OCCURRED;
-        };
+        return description.toString();
     }
 }

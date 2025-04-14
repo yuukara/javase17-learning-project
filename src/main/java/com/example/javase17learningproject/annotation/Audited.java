@@ -14,22 +14,20 @@ import com.example.javase17learningproject.model.audit.AuditEvent.Severity;
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
 public @interface Audited {
-
     /**
-     * 監査イベントのタイプを指定します。
-     * デフォルトは空文字列で、この場合はメソッド名が使用されます。
+     * 監査イベントのタイプ。
      */
-    String eventType() default "";
+    String eventType();
 
     /**
-     * イベントの重要度を指定します。
-     * デフォルトはMEDIUMです。
+     * 監査イベントの重要度。
+     * デフォルトはMEDIUM。
      */
     Severity severity() default Severity.MEDIUM;
 
     /**
-     * 監査ログに記録する説明を指定します。
-     * デフォルトは空文字列です。
+     * イベントの説明。
+     * デフォルトは空文字列。
      */
     String description() default "";
 }

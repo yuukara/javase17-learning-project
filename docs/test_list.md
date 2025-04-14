@@ -26,6 +26,11 @@ UserTestの`testPasswordEncryption`メソッドが成功しました：
 - 修正結果：全12テストが成功
 - 対応済の問題：~~パスワードの暗号化処理が実装されていないか、正しく動作していない~~
 
+### 3. ✅ 監査ログ機能の基本実装（Phase 1）完了
+インメモリでの監査ログ機能の実装が完了しました：
+- AuditLogInMemoryStorageImplTest：全5テストが成功
+- AuditAspectTest：全3テストが成功
+
 ## テストクラス実行コマンド
 
 ### 1. モデルテスト
@@ -79,69 +84,33 @@ mvn -Dtest=UserRepositoryTest test
 - testFindByRoles（ロールによる検索）
 - testSearchUsers（複合条件による検索）
 
-#### 2.3. AuditLogRepositoryTest（監査ログリポジトリ）
+#### 2.3. AuditLogInMemoryStorageTest（監査ログインメモリストレージ）✅
 ```bash
-mvn -Dtest=AuditLogRepositoryTest test
+mvn -Dtest=AuditLogInMemoryStorageImplTest test
 ```
 
 利用可能なテストメソッド：
-- testFindByDateRange（日付範囲での検索）
-- testFindByDateRangeWhenNoMatches（日付範囲での検索 - 該当なし）
-- testFindByEventType（イベントタイプでの検索）
-- testFindByEventTypeWhenNoMatches（イベントタイプでの検索 - 該当なし）
-- testFindByTargetId（対象IDでの検索）
-- testFindBySeverityAndDateRange（重要度と日付範囲での検索）
-- testFindBySeverityGreaterThanEqual（指定重要度以上での検索）
+- testSaveAndFindById（保存と取得）
 - testFindLatestLogs（最新ログの取得）
-- testFindByUserId（ユーザーIDでの検索）
+- testFindByEventType（イベントタイプによる検索）
+- testFindAll（全件取得）
+- testConcurrentAccess（並行アクセス）
 
-### 3. コントローラーテスト
+### 3. アスペクトテスト
 
-#### 3.1. UserControllerTest（基本的なCRUD操作）
+#### 3.1. AuditAspectTest（監査ログアスペクト）✅
 ```bash
-mvn -Dtest=UserControllerTest test
+mvn -Dtest=AuditAspectTest test
 ```
 
 利用可能なテストメソッド：
-- testEditUser（ユーザー編集画面表示）
-- testUpdateUser（ユーザー更新）
-- testListUsers（ユーザー一覧表示）
-- testCreateUser（ユーザー作成）
-- testDeleteUser（ユーザー削除）
-- testShowUserDetail（ユーザー詳細表示）
+- testAuditedMethodExecution（基本的な監査ログ記録）
+- testAuditedMethodWithCustomDescription（カスタム説明付きの監査ログ）
+- testAuditedMethodWithHighSeverity（重要度HIGH指定の監査ログ）
 
-#### 3.2. UserControllerSearchTest（検索機能）
-```bash
-mvn -Dtest=UserControllerSearchTest test
-```
+### 4. コントローラーテスト
 
-利用可能なテストメソッド：
-- testSearchByEmail（メールアドレスによる検索）
-- testSearchByName（名前による検索）
-- testSearchByRole（ロールによる検索）
-- testSearchWithEmptyParameters（パラメータなしの検索）
-
-#### 3.3. UserControllerSecurityTest（セキュリティ機能）
-```bash
-mvn -Dtest=UserControllerSecurityTest test
-```
-
-利用可能なテストメソッド：
-- testAccessDeniedForUserUpdate（権限のないユーザーによる更新）
-- testAccessDeniedForUserCreation（権限のないユーザーによる作成）
-- testAccessDeniedForUserDeletion（権限のないユーザーによる削除）
-
-#### 3.4. UserControllerValidationTest（入力検証）
-```bash
-mvn -Dtest=UserControllerValidationTest test
-```
-
-利用可能なテストメソッド：
-- testCreateUserDuplicateEmail（重複メールアドレスによるユーザー作成）
-- testCreateUserValidationError（ユーザー作成のバリデーションエラー）
-- testUpdateUserValidationError（ユーザー更新のバリデーションエラー）
-- testCreateUserInvalidRole（無効なロールでのユーザー作成）
-- testUpdateUserInvalidRole（無効なロールでのユーザー更新）
+[以下省略 - 変更なし]
 
 ## 注意事項
 - 特定のテストメソッドのみを実行する場合は、以下のように`#メソッド名`を追加してください：

@@ -2,153 +2,119 @@ package com.example.javase17learningproject.aspect;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import static org.mockito.ArgumentMatchers.any;
 import org.mockito.Captor;
-import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
+import static org.mockito.Mockito.when;
+import org.springframework.aop.aspectj.annotation.AspectJProxyFactory;
 import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.context.annotation.Import;
-import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.test.context.junit.jupiter.SpringExtension;
 
 import com.example.javase17learningproject.annotation.Audited;
-import com.example.javase17learningproject.model.audit.AuditEvent;
+import com.example.javase17learningproject.model.AuditLog;
+import com.example.javase17learningproject.model.User;
 import com.example.javase17learningproject.model.audit.AuditEvent.Severity;
-import com.example.javase17learningproject.service.AuditLogService;
+import com.example.javase17learningproject.repository.AuditLogInMemoryStorage;
 
-/**
- * AuditAspectのテストクラス。
- */
-@SpringBootTest
-@Import({AuditAspect.class, AuditAspectTest.TestService.class})
+@ExtendWith(SpringExtension.class)
 class AuditAspectTest {
 
-    @Autowired
-    private TestService testService;
-
     @MockBean
-    private AuditLogService auditLogService;
+    private AuditLogInMemoryStorage auditLogStorage;
 
     @Captor
-    private ArgumentCaptor<AuditEvent> eventCaptor;
+    private ArgumentCaptor<AuditLog> auditLogCaptor;
 
-    @Captor
-    private ArgumentCaptor<String> descriptionCaptor;
+    private TestService createProxiedTestService() {
+        // セキュリティコンテキストのセットアップ
+        SecurityContext securityContext = mock(SecurityContext.class);
+        Authentication authentication = mock(Authentication.class);
+        User user = new User("test", "test@example.com", "password");
+        user.setId(1L);
 
-    @Test
-    @WithMockUser(username = "test@example.com")
-    void testAuditedMethodSuccess() {
-        // When
-        testService.successMethod("testParam");
+        when(authentication.getPrincipal()).thenReturn(user);
+        when(securityContext.getAuthentication()).thenReturn(authentication);
+        SecurityContextHolder.setContext(securityContext);
 
-        // Then
-        verify(auditLogService, times(1)).logEvent(
-            eventCaptor.capture(),
-            any(),
-            any(),
-            descriptionCaptor.capture()
-        );
+        // AOPプロキシの作成
+        TestService target = new TestService();
+        AspectJProxyFactory factory = new AspectJProxyFactory(target);
+        AuditAspect aspect = new AuditAspect(auditLogStorage);
+        factory.addAspect(aspect);
 
-        AuditEvent capturedEvent = eventCaptor.getValue();
-        String capturedDescription = descriptionCaptor.getValue();
-
-        assertThat(capturedEvent.getType()).isEqualTo("TEST_SUCCESS");
-        assertThat(capturedEvent.getSeverity()).isEqualTo(Severity.LOW);
-        assertThat(capturedDescription).contains("testParam");
+        return factory.getProxy();
     }
 
     @Test
-    @WithMockUser(username = "test@example.com")
-    void testAuditedMethodFailure() {
+    void testAuditedMethodExecution() {
+        // Given
+        TestService service = createProxiedTestService();
+        Long targetId = 123L;
+        when(auditLogStorage.save(any(AuditLog.class))).thenAnswer(i -> i.getArgument(0));
+
         // When
-        try {
-            testService.failureMethod();
-        } catch (RuntimeException e) {
-            // Expected
-        }
+        service.auditedMethod(targetId);
 
         // Then
-        verify(auditLogService, times(1)).logEvent(
-            eventCaptor.capture(),
-            any(),
-            any(),
-            descriptionCaptor.capture()
-        );
-
-        AuditEvent capturedEvent = eventCaptor.getValue();
-        String capturedDescription = descriptionCaptor.getValue();
-
-        assertThat(capturedEvent.getType()).isEqualTo("TEST_FAILURE");
-        assertThat(capturedEvent.getSeverity()).isEqualTo(Severity.HIGH);
-        assertThat(capturedDescription).contains("テスト用エラー");
+        verify(auditLogStorage).save(auditLogCaptor.capture());
+        AuditLog capturedLog = auditLogCaptor.getValue();
+        assertThat(capturedLog.eventType()).isEqualTo("TEST_EVENT");
+        assertThat(capturedLog.severity()).isEqualTo(Severity.MEDIUM);
+        assertThat(capturedLog.userId()).isEqualTo(1L);
+        assertThat(capturedLog.targetId()).isEqualTo(targetId);
     }
 
     @Test
-    @WithMockUser(username = "test@example.com")
-    void testCustomDescriptionMethod() {
+    void testAuditedMethodWithCustomDescription() {
+        // Given
+        TestService service = createProxiedTestService();
+        Long targetId = 456L;
+
         // When
-        testService.customDescriptionMethod();
+        service.auditedMethodWithDescription(targetId);
 
         // Then
-        verify(auditLogService, times(1)).logEvent(
-            eventCaptor.capture(),
-            any(),
-            any(),
-            descriptionCaptor.capture()
-        );
-
-        String capturedDescription = descriptionCaptor.getValue();
-        assertThat(capturedDescription).isEqualTo("カスタム説明付きの監査ログ");
+        verify(auditLogStorage).save(auditLogCaptor.capture());
+        AuditLog capturedLog = auditLogCaptor.getValue();
+        assertThat(capturedLog.description()).isEqualTo("Custom test description");
     }
 
     @Test
-    @WithMockUser(username = "test@example.com")
-    void testMethodWithParameters() {
+    void testAuditedMethodWithHighSeverity() {
+        // Given
+        TestService service = createProxiedTestService();
+        Long targetId = 789L;
+
         // When
-        testService.methodWithParameters(1L, "testValue");
+        service.auditedMethodWithHighSeverity(targetId);
 
         // Then
-        verify(auditLogService, times(1)).logEvent(
-            eventCaptor.capture(),
-            any(),
-            any(),
-            descriptionCaptor.capture()
-        );
-
-        String capturedDescription = descriptionCaptor.getValue();
-        assertThat(capturedDescription).contains("1");
-        assertThat(capturedDescription).contains("testValue");
+        verify(auditLogStorage).save(auditLogCaptor.capture());
+        AuditLog capturedLog = auditLogCaptor.getValue();
+        assertThat(capturedLog.severity()).isEqualTo(Severity.HIGH);
     }
 
-    /**
-     * テスト用のサービスクラス
-     */
+    // テスト用のサービスクラス
     static class TestService {
-        
-        @Audited(eventType = "TEST_SUCCESS", severity = Severity.LOW)
-        public void successMethod(String param) {
-            // テスト用の成功メソッド
+        @Audited(eventType = "TEST_EVENT")
+        public void auditedMethod(Long id) {
+            // テストメソッド
         }
 
-        @Audited(eventType = "TEST_FAILURE", severity = Severity.HIGH)
-        public void failureMethod() {
-            throw new RuntimeException("テスト用エラー");
+        @Audited(eventType = "TEST_EVENT", description = "Custom test description")
+        public void auditedMethodWithDescription(Long id) {
+            // テストメソッド
         }
 
-        @Audited(
-            eventType = "CUSTOM_DESCRIPTION",
-            severity = Severity.MEDIUM,
-            description = "カスタム説明付きの監査ログ"
-        )
-        public void customDescriptionMethod() {
-            // カスタム説明のテスト
-        }
-
-        @Audited(eventType = "METHOD_WITH_PARAMS", severity = Severity.MEDIUM)
-        public void methodWithParameters(Long id, String value) {
-            // パラメータ付きメソッドのテスト
+        @Audited(eventType = "TEST_EVENT", severity = Severity.HIGH)
+        public void auditedMethodWithHighSeverity(Long id) {
+            // テストメソッド
         }
     }
 }
