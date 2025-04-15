@@ -1,0 +1,76 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: password
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        use_sql_comments: true
+        # キャッシュ設定
+        cache:
+          use_second_level_cache: true
+          region:
+            factory_class: org.hibernate.cache.ehcache.EhCacheRegionFactory
+          use_query_cache: true
+
+  cache:
+    type: caffeine
+    caffeine:
+      spec: maximumSize=1000,expireAfterWrite=15m
+
+  security:
+    user:
+      name: admin
+      password: admin
+
+# 監査ログの設定
+audit:
+  archive:
+    # アーカイブのベースディレクトリ
+    base-path: ./archives
+    # 日次アーカイブのサブディレクトリ
+    daily-dir: daily
+    # 月次アーカイブのサブディレクトリ
+    monthly-dir: monthly
+    # 保持期間（日数）
+    retention-days: 90
+    # アーカイブスケジュール
+    schedules:
+      # 日次アーカイブの作成時刻
+      daily: "0 0 1 * * ?"  # 毎日午前1時
+      # 月次アーカイブの作成時刻
+      monthly: "0 0 2 1 * ?" # 毎月1日午前2時
+      # クリーンアップの実行時刻
+      cleanup: "0 0 3 * * ?" # 毎日午前3時
+  
+  # ログローテーション設定
+  rotation:
+    # 1ファイルあたりの最大サイズ（メガバイト）
+    max-file-size: 100
+    # アーカイブファイルの最大数
+    max-archive-count: 10
+
+# アクチュエータの設定
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    tags:
+      application: audit-log-service
+
+logging:
+  level:
+    com.example.javase17learningproject: DEBUG
+    org.hibernate: INFO
