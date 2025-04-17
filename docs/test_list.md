@@ -31,6 +31,30 @@ UserTestの`testPasswordEncryption`メソッドが成功しました：
 - AuditLogInMemoryStorageImplTest：全5テストが成功
 - AuditAspectTest：全3テストが成功
 
+### 4. ✅ Java 23環境でのMockitoテスト実行
+Java 23環境でMockitoのテストを実行する場合、ByteBuddy実験的機能の有効化が必要です：
+
+対応方法：
+1. 環境変数による設定：
+```powershell
+# PowerShell
+$env:MAVEN_OPTS="-Dnet.bytebuddy.experimental=true"; mvn test
+
+# Bash
+export MAVEN_OPTS="-Dnet.bytebuddy.experimental=true" && mvn test
+```
+
+2. Maven Surefire Plugin設定による対応：
+```xml
+<plugin>
+    <groupId>org.apache.maven.plugins</groupId>
+    <artifactId>maven-surefire-plugin</artifactId>
+    <configuration>
+        <argLine>-Dnet.bytebuddy.experimental=true</argLine>
+    </configuration>
+</plugin>
+```
+
 ## テストクラス実行コマンド
 
 ### 1. モデルテスト
@@ -108,9 +132,40 @@ mvn -Dtest=AuditAspectTest test
 - testAuditedMethodWithCustomDescription（カスタム説明付きの監査ログ）
 - testAuditedMethodWithHighSeverity（重要度HIGH指定の監査ログ）
 
-### 4. コントローラーテスト
+### 4. メトリクステスト
 
-[以下省略 - 変更なし]
+#### 4.1. AuditLogMetricsTest（監査ログメトリクス）✅
+```bash
+mvn -Dtest=AuditLogMetricsTest test
+```
+
+利用可能なテストメソッド：
+- testDailyArchiveSuccessCount（日次アーカイブ成功カウント）
+- testDailyArchiveFailureCount（日次アーカイブ失敗カウント）
+- testMonthlyArchiveSuccessCount（月次アーカイブ成功カウント）
+- testMonthlyArchiveFailureCount（月次アーカイブ失敗カウント）
+- testDailyArchiveDuration（日次アーカイブ処理時間）
+- testMonthlyArchiveDuration（月次アーカイブ処理時間）
+- testCombinedMetrics（複合メトリクス）
+
+#### 4.2. AuditLogSchedulerServiceTest（スケジューラーサービス）✅
+```bash
+mvn -Dtest=AuditLogSchedulerServiceTest test
+```
+
+利用可能なテストメソッド：
+- testScheduleDailyArchive（日次アーカイブのスケジュール）
+- testScheduleMonthlyArchive（月次アーカイブのスケジュール）
+- testScheduleCleanup（クリーンアップのスケジュール）
+- testHandleDailyArchiveSuccess（日次アーカイブ成功時の処理）
+- testHandleMonthlyArchiveSuccess（月次アーカイブ成功時の処理）
+- testHandleCleanupSuccess（クリーンアップ成功時の処理）
+- testHandleDailyArchiveFailure（日次アーカイブ失敗時の処理）
+
+複数のテストを同時に実行する場合：
+```bash
+mvn test -Dtest="AuditLogMetricsTest,AuditLogSchedulerServiceTest"
+```
 
 ## 注意事項
 - 特定のテストメソッドのみを実行する場合は、以下のように`#メソッド名`を追加してください：
@@ -126,3 +181,6 @@ mvn -Dtest=AuditAspectTest test
 
 - テスト実行時にエラーが発生する場合は、実装の問題である可能性があります。
   その場合は実装を確認してください。
+
+- Java 23環境でテストを実行する場合は、ByteBuddy実験的機能の有効化が必要です。
+  上記の「Java 23環境でのMockitoテスト実行」セクションを参照してください。

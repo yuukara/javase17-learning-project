@@ -5,12 +5,14 @@ import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import com.example.javase17learningproject.metrics.AuditLogMetrics;
 import com.example.javase17learningproject.scheduler.model.ScheduledTask;
 import com.example.javase17learningproject.scheduler.model.TaskPriority;
 import com.example.javase17learningproject.scheduler.model.TaskResult;
@@ -29,15 +31,18 @@ public class AuditLogSchedulerService {
     private final TaskManager taskManager;
     private final RetryManager retryManager;
     private final AuditLogArchiveService archiveService;
+    private final AuditLogMetrics metrics;
 
     public AuditLogSchedulerService(
         TaskManager taskManager,
         RetryManager retryManager,
-        AuditLogArchiveService archiveService
+        AuditLogArchiveService archiveService,
+        AuditLogMetrics metrics
     ) {
         this.taskManager = taskManager;
         this.retryManager = retryManager;
         this.archiveService = archiveService;
+        this.metrics = metrics;
         registerTaskHandlers();
     }
 
@@ -109,6 +114,7 @@ public class AuditLogSchedulerService {
 
     /**
      * 日次アーカイブタスクを処理します。
+     * メトリクスとして処理時間と成功/失敗回数を記録します。
      */
     private TaskResult handleDailyArchive(Map<String, Object> params) {
         LocalDateTime startTime = LocalDateTime.now();
@@ -116,7 +122,13 @@ public class AuditLogSchedulerService {
         LocalDate targetDate = (LocalDate) params.get("date");
 
         try {
+            long processingStartTime = System.nanoTime();
             int count = archiveService.createDailyArchive(targetDate);
+            long duration = System.nanoTime() - processingStartTime;
+            
+            metrics.recordDailyArchiveSuccess();
+            metrics.recordDailyArchiveDuration(duration, TimeUnit.NANOSECONDS);
+
             return TaskResult.success(
                 taskId,
                 startTime,
@@ -125,6 +137,7 @@ public class AuditLogSchedulerService {
             );
         } catch (Exception e) {
             logger.error("日次アーカイブ作成エラー: {}", targetDate, e);
+            metrics.recordDailyArchiveFailure();
             return TaskResult.failure(
                 taskId,
                 startTime,
@@ -137,6 +150,7 @@ public class AuditLogSchedulerService {
 
     /**
      * 月次アーカイブタスクを処理します。
+     * メトリクスとして処理時間と成功/失敗回数を記録します。
      */
     private TaskResult handleMonthlyArchive(Map<String, Object> params) {
         LocalDateTime startTime = LocalDateTime.now();
@@ -144,7 +158,13 @@ public class AuditLogSchedulerService {
         YearMonth targetMonth = (YearMonth) params.get("yearMonth");
 
         try {
+            long processingStartTime = System.nanoTime();
             int count = archiveService.createMonthlyArchive(targetMonth);
+            long duration = System.nanoTime() - processingStartTime;
+            
+            metrics.recordMonthlyArchiveSuccess();
+            metrics.recordMonthlyArchiveDuration(duration, TimeUnit.NANOSECONDS);
+
             return TaskResult.success(
                 taskId,
                 startTime,
@@ -153,6 +173,7 @@ public class AuditLogSchedulerService {
             );
         } catch (Exception e) {
             logger.error("月次アーカイブ作成エラー: {}", targetMonth, e);
+            metrics.recordMonthlyArchiveFailure();
             return TaskResult.failure(
                 taskId,
                 startTime,
@@ -197,7 +218,6 @@ public class AuditLogSchedulerService {
     private CompletableFuture<TaskResult> executeTaskAsync(ScheduledTask task) {
         return CompletableFuture.supplyAsync(() -> {
             try {
-                // タスクの実行とリトライ処理
                 return executeWithRetry(task);
             } catch (Exception e) {
                 logger.error("タスク実行エラー: {}", task, e);
