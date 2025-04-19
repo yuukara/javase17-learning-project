@@ -1,25 +1,44 @@
 # 実装チェックリスト
 
-[前半部分は変更なし]
+## 目的
+このチェックリストは以下の目的で使用されます：
+1. 基本実装（Phase 1）の進捗管理
+2. 実装項目の完了確認
+3. レビュー時の確認項目として使用
+4. 今後の開発タスクの可視化
+
+## 記入ルール
+- [ ] ：未着手の項目
+- [x] ：実装完了した項目
+- [?] ：確認が必要な項目
+- [-] ：実装しないことが決定した項目
 
 ## 4. 監査ログ機能の実装
 
 ### 実装方針:
 
-#### Phase 1: Java 17 Record実装（完了）
+#### Phase 1: Java 17 Record実装
 1. データ構造
-   - [x] `AuditLog`レコードクラスの実装 ← 完了（Java 17機能学習）
-   - [x] `AuditEvent`シールドクラスの実装 ← 完了
-   - [x] イベントタイプの定義 ← 完了
-   - [x] インメモリキャッシュの実装 ← AuditLogInMemoryStorage完了
-   - [x] ログローテーション方式の設計 ← Phase 2で詳細化
+   - [x] `AuditLog`レコードクラスの実装
+   - [x] `AuditEvent`シールドクラスの実装
+   - [x] イベントタイプの定義
+   - [x] インメモリキャッシュの実装（AuditLogInMemoryStorage）
+   - [?] ログローテーション方式の設計（Phase 2で詳細化予定）
 
-2. 基本機能
-   - [x] インメモリログ管理サービスの実装 ← ConcurrentHashMapベースの実装完了
-   - [x] Spring AOPによるログ記録の実装 ← @Auditedアノテーションとアスペクト完了
-   - [x] 基本的なログ記録機能のテスト ← ストレージとアスペクトのテスト完了
+2. キャッシュ機能
+   - [x] Caffeine依存関係の追加
+   - [x] キャッシュ設定クラスの実装
+   - [x] キャッシュマネージャーの実装
+   - [x] キャッシュ統計収集の実装
+   - [ ] キャッシュサイズの制限実装
+   - [ ] パフォーマンス最適化
 
-#### Phase 2: データベース永続化（詳細設計完了）
+3. 基本機能
+   - [x] インメモリログ管理サービスの実装（ConcurrentHashMapベース）
+   - [x] Spring AOPによるログ記録の実装（@Auditedアノテーション）
+   - [x] 基本的なログ記録機能のテスト
+
+#### Phase 2: データベース永続化
 1. データベース設計
    - [ ] エンティティクラスの作成
      * AuditLogEntityの実装
@@ -98,31 +117,44 @@
    - [ ] 検証
    - [ ] 本番環境への適用
 
-[以下は変更なし]
-
 ## 5. サービス層の基本実装
 
 ### インターフェースと実装の分離
-1. 基本サービス
+1. 監査ログ関連サービス
+   - [x] AuditLogService
+     * インターフェースの作成
+     * 実装クラスの移動（AuditLogServiceImpl）
+   - [x] AuditLogArchiveService
+     * インターフェースの作成
+     * 実装クラスの移動（AuditLogArchiveServiceImpl）
+
+2. 基本サービス
    - [ ] AccessControlService
-     * インターフェース作成
-     * 実装クラスの移動
+     * インターフェースの作成
+     * 実装クラスの移動（AccessControlServiceImpl）
    - [ ] UserService
-     * インターフェース作成
-     * 実装クラスの移動
+     * インターフェースの作成
+     * 実装クラスの移動（UserServiceImpl）
    - [ ] PasswordEncodingService
-     * インターフェース作成
-     * 実装クラスの移動
+     * インターフェースの作成
+     * 実装クラスの移動（PasswordEncodingServiceImpl）
 
-2. 認証関連サービス
+3. 認証関連サービス
    - [ ] CustomUserDetailsService
-     * インターフェース作成
-     * 実装クラスの移動
+     * インターフェースの作成
+     * 実装クラスの移動（CustomUserDetailsServiceImpl）
+   - [ ] AuditLogCacheService
+     * インターフェースの作成
+     * 実装クラスの移動（AuditLogCacheServiceImpl）
 
-3. パッケージ構成の整理
+4. パッケージ構成の整理
+   - [x] entityパッケージの作成
    - [ ] serviceパッケージのインターフェース整理
    - [ ] service.implパッケージの作成
+   - [x] cacheパッケージの作成
 
-4. 基本テスト
-   - [ ] 単体テストの修正
+5. テスト
+   - [x] AuditLogServiceのテスト実装
+   - [x] AuditLogArchiveServiceのテスト実装
+   - [ ] その他サービスの単体テスト修正
    - [ ] 依存性注入の確認
