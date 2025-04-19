@@ -1,9 +1,7 @@
-package com.example.javase17learningproject.model;
+package com.example.javase17learningproject.entity;
 
-import java.time.LocalDateTime;
-
-import com.example.javase17learningproject.model.audit.AuditEvent.Severity;
-
+import com.example.javase17learningproject.model.AuditLog;
+import com.example.javase17learningproject.model.audit.AuditEvent;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -15,10 +13,13 @@ import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import org.hibernate.annotations.Cache;
+import org.hibernate.annotations.CacheConcurrencyStrategy;
+
+import java.time.LocalDateTime;
 
 /**
- * 監査ログのエンティティクラス。
- * データベースでの永続化を担当します。
+ * 監査ログのエンティティクラス.
  */
 @Entity
 @Table(
@@ -30,6 +31,7 @@ import jakarta.validation.constraints.NotNull;
         @Index(name = "idx_audit_severity_created_at", columnList = "severity,created_at")
     }
 )
+@Cache(usage = CacheConcurrencyStrategy.READ_WRITE)
 public class AuditLogEntity {
 
     @Id
@@ -43,7 +45,7 @@ public class AuditLogEntity {
     @NotNull
     @Enumerated(EnumType.STRING)
     @Column(name = "severity", nullable = false)
-    private Severity severity;
+    private AuditEvent.Severity severity;
 
     @Column(name = "user_id")
     private Long userId;
@@ -65,12 +67,12 @@ public class AuditLogEntity {
     }
 
     /**
-     * 全フィールドを指定するコンストラクタ。
+     * 全フィールドを指定するコンストラクタ.
      */
     public AuditLogEntity(
         Long id,
         String eventType,
-        Severity severity,
+        AuditEvent.Severity severity,
         Long userId,
         Long targetId,
         String description,
@@ -78,7 +80,7 @@ public class AuditLogEntity {
     ) {
         this.id = id;
         this.eventType = eventType;
-        this.severity = severity != null ? severity : Severity.MEDIUM;
+        this.severity = severity != null ? severity : AuditEvent.Severity.MEDIUM;
         this.userId = userId;
         this.targetId = targetId;
         this.description = description;
@@ -86,7 +88,10 @@ public class AuditLogEntity {
     }
 
     /**
-     * AuditLogレコードからエンティティを作成するファクトリメソッド。
+     * レコードからエンティティを作成します.
+     *
+     * @param record 変換元のAuditLogレコード
+     * @return 作成されたエンティティ
      */
     public static AuditLogEntity fromRecord(AuditLog record) {
         return new AuditLogEntity(
@@ -101,7 +106,9 @@ public class AuditLogEntity {
     }
 
     /**
-     * エンティティをAuditLogレコードに変換するメソッド。
+     * エンティティをレコードに変換します.
+     *
+     * @return 変換されたAuditLogレコード
      */
     public AuditLog toRecord() {
         return new AuditLog(
@@ -115,37 +122,61 @@ public class AuditLogEntity {
         );
     }
 
-    // Getters
+    // Getters and Setters
+
     public Long getId() {
         return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
     }
 
     public String getEventType() {
         return eventType;
     }
 
-    public Severity getSeverity() {
+    public void setEventType(String eventType) {
+        this.eventType = eventType;
+    }
+
+    public AuditEvent.Severity getSeverity() {
         return severity;
+    }
+
+    public void setSeverity(AuditEvent.Severity severity) {
+        this.severity = severity;
     }
 
     public Long getUserId() {
         return userId;
     }
 
+    public void setUserId(Long userId) {
+        this.userId = userId;
+    }
+
     public Long getTargetId() {
         return targetId;
+    }
+
+    public void setTargetId(Long targetId) {
+        this.targetId = targetId;
     }
 
     public String getDescription() {
         return description;
     }
 
+    public void setDescription(String description) {
+        this.description = description;
+    }
+
     public LocalDateTime getCreatedAt() {
         return createdAt;
     }
 
-    // Setters for non-final fields
-    public void setDescription(String description) {
-        this.description = description;
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
     }
 }

@@ -499,6 +499,30 @@ public HttpStatus determineHttpStatus(OperationResult result) {
 
 設計とコードの整合性を確保するため、以下の点について確認と対応が必要です：
 
+### 11.4. サービス層のリファクタリング計画
+
+1. **インターフェースと実装の分離**:
+   * 目的：保守性とテスト容易性の向上
+   * 方針：インターフェースと実装クラスを分離し、適切なパッケージに配置
+
+2. **対象サービス**:
+   * AccessControlService
+   * AuditLogCacheService
+   * CustomUserDetailsService
+   * PasswordEncodingService
+   * UserService
+
+3. **パッケージ構成**:
+   * service: インターフェースを配置
+   * service.impl: 実装クラスを配置
+
+4. **リファクタリング手順**:
+   * インターフェース抽出
+   * 実装クラスの移動
+   * 依存関係の更新
+   * テストコードの調整
+
+
 ### 12.1. User エンティティ実装の確認
 
 - [ ] UserエンティティがUserDetailsを実装しているか確認する

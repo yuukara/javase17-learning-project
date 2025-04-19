@@ -1,63 +1,77 @@
 spring:
+  application:
+    name: audit-log-service
+
+  # データベース設定
   datasource:
-    url: jdbc:h2:mem:testdb
-    driver-class-name: org.h2.Driver
+    url: jdbc:h2:mem:auditdb
     username: sa
     password: password
+    driver-class-name: org.h2.Driver
 
+  # JPA設定
   jpa:
     hibernate:
       ddl-auto: update
-    show-sql: true
     properties:
       hibernate:
-        format_sql: true
-        use_sql_comments: true
-        # キャッシュ設定
+        # セカンドレベルキャッシュの設定
         cache:
           use_second_level_cache: true
-          region:
-            factory_class: org.hibernate.cache.ehcache.EhCacheRegionFactory
           use_query_cache: true
+          region:
+            factory_class: org.hibernate.cache.jcache.JCacheRegionFactory
+        javax.cache:
+          provider: com.github.benmanes.caffeine.jcache.spi.CaffeineCachingProvider
+        generate_statistics: true # キャッシュ統計の有効化
 
-  cache:
-    type: caffeine
-    caffeine:
-      spec: maximumSize=1000,expireAfterWrite=15m
-
-  security:
-    user:
-      name: admin
-      password: admin
-
-# 監査ログの設定
+# アプリケーション固有の設定
 audit:
+  # アーカイブ設定
   archive:
-    # アーカイブのベースディレクトリ
-    base-path: ./archives
-    # 日次アーカイブのサブディレクトリ
-    daily-dir: daily
-    # 月次アーカイブのサブディレクトリ
-    monthly-dir: monthly
-    # 保持期間（日数）
-    retention-days: 90
-    # アーカイブスケジュール
-    schedules:
-      # 日次アーカイブの作成時刻
-      daily: "0 0 1 * * ?"  # 毎日午前1時
-      # 月次アーカイブの作成時刻
-      monthly: "0 0 2 1 * ?" # 毎月1日午前2時
-      # クリーンアップの実行時刻
-      cleanup: "0 0 3 * * ?" # 毎日午前3時
-  
-  # ログローテーション設定
-  rotation:
-    # 1ファイルあたりの最大サイズ（メガバイト）
-    max-file-size: 100
-    # アーカイブファイルの最大数
-    max-archive-count: 10
+    base-dir: archives
+    retention:
+      daily: 30  # 日次アーカイブの保持期間（日）
+      monthly: 12 # 月次アーカイブの保持期間（月）
 
-# アクチュエータの設定
+  # キャッシュ設定
+  cache:
+    caffeine:
+      audit-log:
+        maximum-size: 1000
+        expire-after-write: 15m
+        record-stats: true
+    hibernate:
+      entity:
+        # エンティティキャッシュの設定
+        audit-log:
+          maximum-size: 1000
+          expire-after-write: 30m
+      query:
+        # クエリキャッシュの設定
+        audit.log.byEventType:
+          maximum-size: 100
+          expire-after-write: 15m
+        audit.log.byUserId:
+          maximum-size: 100
+          expire-after-write: 15m
+        audit.log.byDateRange:
+          maximum-size: 100
+          expire-after-write: 15m
+        audit.log.bySeverityAndDate:
+          maximum-size: 100
+          expire-after-write: 15m
+        audit.log.byDateRangePaged:
+          maximum-size: 100
+          expire-after-write: 15m
+        audit.log.search:
+          maximum-size: 100
+          expire-after-write: 15m
+        audit.log.count:
+          maximum-size: 50
+          expire-after-write: 15m
+
+# アクチュエータ設定
 management:
   endpoints:
     web:
@@ -68,9 +82,17 @@ management:
       show-details: always
   metrics:
     tags:
-      application: audit-log-service
+      application: ${spring.application.name}
+    export:
+      prometheus:
+        enabled: true
 
+# ログ設定
 logging:
   level:
+    root: INFO
     com.example.javase17learningproject: DEBUG
-    org.hibernate: INFO
+    org.hibernate:
+      SQL: DEBUG
+      type.descriptor.sql.BasicBinder: TRACE
+      cache: DEBUG

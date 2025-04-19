@@ -17,9 +17,11 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.example.javase17learningproject.archive.AuditLogArchiveService;
+import com.example.javase17learningproject.archive.ArchiveStatistics;
 import com.example.javase17learningproject.config.ArchiveConfig;
 import com.example.javase17learningproject.model.AuditLog;
-import com.example.javase17learningproject.model.AuditLogEntity;
+import com.example.javase17learningproject.entity.AuditLogEntity;
 import com.example.javase17learningproject.model.audit.AuditEvent.Severity;
 import com.example.javase17learningproject.repository.AuditLogRepository;
 import com.example.javase17learningproject.util.JsonArchiveUtils;

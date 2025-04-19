@@ -17,8 +17,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.example.javase17learningproject.model.AuditLog;
-import com.example.javase17learningproject.model.AuditLogEntity;
-import com.example.javase17learningproject.model.audit.AuditEvent.Severity;
+import com.example.javase17learningproject.model.audit.AuditEvent;
+import com.example.javase17learningproject.entity.AuditLogEntity;
 import com.example.javase17learningproject.repository.AuditLogInMemoryStorage;
 import com.example.javase17learningproject.repository.AuditLogRepository;
 
@@ -79,7 +79,7 @@ public class AuditLogServiceImpl implements AuditLogService {
     @Transactional(readOnly = true)
     public Page<AuditLog> searchLogs(
         String eventType,
-        Severity severity,
+        AuditEvent.Severity severity,
         Long userId,
         LocalDateTime startDate,
         LocalDateTime endDate,
@@ -191,7 +191,7 @@ public class AuditLogServiceImpl implements AuditLogService {
 
     @Override
     @Transactional(readOnly = true)
-    public Map<Severity, Long> countBySeverity(LocalDateTime start, LocalDateTime end) {
+    public Map<AuditEvent.Severity, Long> countBySeverity(LocalDateTime start, LocalDateTime end) {
         return repository.findByCreatedAtBetween(start, end).stream()
             .collect(Collectors.groupingBy(
                 AuditLogEntity::getSeverity,
