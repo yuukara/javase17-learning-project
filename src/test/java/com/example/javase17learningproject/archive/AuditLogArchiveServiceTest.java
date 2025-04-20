@@ -1,9 +1,13 @@
 package com.example.javase17learningproject.archive;
 
+import java.io.IOException;
+import java.time.LocalDateTime;
+
 import com.example.javase17learningproject.archive.impl.AuditLogArchiveServiceImpl;
+import com.example.javase17learningproject.config.ArchiveConfig;
 import com.example.javase17learningproject.entity.AuditLogEntity;
 import com.example.javase17learningproject.model.AuditLog;
-import com.example.javase17learningproject.model.Severity;
+import com.example.javase17learningproject.model.audit.AuditEvent;
 import com.example.javase17learningproject.repository.AuditLogRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -26,8 +30,13 @@ import static org.mockito.Mockito.when;
 
 class AuditLogArchiveServiceTest {
 
+    private static final AuditEvent.Severity TEST_SEVERITY = AuditEvent.Severity.HIGH;
+
     @Mock
     private AuditLogRepository auditLogRepository;
+
+    @Mock
+    private ArchiveConfig archiveConfig;
 
     private AuditLogArchiveService archiveService;
 
@@ -37,13 +46,15 @@ class AuditLogArchiveServiceTest {
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-        archiveService = new AuditLogArchiveServiceImpl();
+        
+        archiveService = new AuditLogArchiveServiceImpl(tempDir.toString());
         ReflectionTestUtils.setField(archiveService, "auditLogRepository", auditLogRepository);
-        ReflectionTestUtils.setField(archiveService, "ARCHIVE_BASE_DIR", tempDir.toString());
+        when(auditLogRepository.findByCreatedAtBetween(any(), any()))
+            .thenReturn(createTestLogs());
     }
 
     @Test
-    void createDailyArchive_成功() {
+    void createDailyArchive_成功() throws IOException {
         // テストデータの準備
         LocalDate date = LocalDate.now();
         LocalDateTime start = date.atStartOfDay();
@@ -67,7 +78,7 @@ class AuditLogArchiveServiceTest {
     }
 
     @Test
-    void createMonthlyArchive_成功() {
+    void createMonthlyArchive_成功() throws IOException {
         // テストデータの準備
         YearMonth yearMonth = YearMonth.now();
         LocalDate start = yearMonth.atDay(1);
@@ -97,13 +108,13 @@ class AuditLogArchiveServiceTest {
     }
 
     @Test
-    void searchArchive_成功() {
+    void searchArchive_成功() throws IOException {
         // テストデータの準備
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime start = now.minusDays(1);
         LocalDateTime end = now;
         String eventType = "TEST_EVENT";
-        Severity severity = Severity.HIGH;
+        AuditEvent.Severity severity = TEST_SEVERITY;
 
         // アーカイブの作成
         List<AuditLogEntity> testLogs = createTestLogs();
@@ -116,29 +127,73 @@ class AuditLogArchiveServiceTest {
 
         // 検証
         assertThat(results).isNotEmpty()
-                          .allMatch(log -> log.getEventType().equals(eventType))
-                          .allMatch(log -> log.getSeverity() == severity)
-                          .allMatch(log -> log.getCreatedAt().isAfter(start))
-                          .allMatch(log -> log.getCreatedAt().isBefore(end));
+                          .allMatch(log -> log.eventType().equals(eventType))
+                          .allMatch(log -> log.severity() == severity)
+                          .allMatch(log -> log.createdAt().isAfter(start))
+                          .allMatch(log -> log.createdAt().isBefore(end));
+    }
+
+    @Test
+    void verifyArchive_成功() throws IOException {
+        // テストデータの準備
+        LocalDate date = LocalDate.now();
+        when(auditLogRepository.findByCreatedAtBetween(any(), any()))
+            .thenReturn(createTestLogs());
+        archiveService.createDailyArchive(date);
+
+        // テスト実行
+        boolean result = archiveService.verifyArchive(date);
+
+        // 検証
+        assertThat(result).isTrue();
+    }
+
+    @Test
+    void deleteOldArchives_成功() throws IOException {
+        // テストデータの準備
+        LocalDateTime now = LocalDateTime.now();
+        LocalDate oldDate = now.minusDays(91).toLocalDate();
+        LocalDate cutoffDate = now.minusDays(90).toLocalDate();
+
+        when(auditLogRepository.findByCreatedAtBetween(any(), any()))
+            .thenReturn(createTestLogs());
+        archiveService.createDailyArchive(oldDate);
+
+        // テスト実行
+        int deletedCount = archiveService.deleteOldArchives(cutoffDate);
+
+        // 検証
+        assertThat(deletedCount).isPositive();
+        Path oldArchivePath = tempDir.resolve("daily")
+            .resolve(String.valueOf(oldDate.getYear()))
+            .resolve(String.format("%02d", oldDate.getMonthValue()))
+            .resolve(String.format("audit_log_%s.json.gz", oldDate));
+        assertThat(oldArchivePath).doesNotExist();
+    }
+
+    @Test
+    void getStatistics_成功() throws IOException {
+        // テストデータの準備
+        LocalDate date = LocalDate.now();
+        when(auditLogRepository.findByCreatedAtBetween(any(), any()))
+            .thenReturn(createTestLogs());
+        archiveService.createDailyArchive(date);
+
+        // テスト実行
+        ArchiveStatistics stats = archiveService.getStatistics();
+
+        // 検証
+        assertThat(stats).isNotNull();
+        assertThat(stats.totalLogs()).isPositive();
+        assertThat(stats.totalFiles()).isPositive();
+        assertThat(stats.totalSize()).isPositive();
     }
 
     private List<AuditLogEntity> createTestLogs() {
-        AuditLogEntity log1 = new AuditLogEntity();
-        log1.setId(1L);
-        log1.setEventType("TEST_EVENT");
-        log1.setSeverity(Severity.HIGH);
-        log1.setUserId(1L);
-        log1.setDescription("Test log 1");
-        log1.setCreatedAt(LocalDateTime.now().minusHours(1));
-
-        AuditLogEntity log2 = new AuditLogEntity();
-        log2.setId(2L);
-        log2.setEventType("TEST_EVENT");
-        log2.setSeverity(Severity.HIGH);
-        log2.setUserId(2L);
-        log2.setDescription("Test log 2");
-        log2.setCreatedAt(LocalDateTime.now().minusMinutes(30));
-
-        return Arrays.asList(log1, log2);
+        LocalDateTime now = LocalDateTime.now();
+        return Arrays.asList(
+            new AuditLogEntity(1L, "TEST_EVENT", TEST_SEVERITY, 1L, null, "Test log 1", now.minusHours(1)),
+            new AuditLogEntity(2L, "TEST_EVENT", TEST_SEVERITY, 2L, null, "Test log 2", now.minusMinutes(30))
+        );
     }
 }

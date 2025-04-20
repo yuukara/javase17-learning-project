@@ -1,4 +1,6 @@
-package com.example.javase17learningproject.service;
+package com.example.javase17learningproject.service.impl;
+
+import com.example.javase17learningproject.archive.AuditLogArchiveService;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -17,7 +19,6 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.example.javase17learningproject.archive.AuditLogArchiveService;
 import com.example.javase17learningproject.archive.ArchiveStatistics;
 import com.example.javase17learningproject.config.ArchiveConfig;
 import com.example.javase17learningproject.model.AuditLog;

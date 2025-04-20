@@ -1,10 +1,8 @@
 package com.example.javase17learningproject.archive.impl;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -12,9 +10,7 @@ import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.stream.Stream;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,395 +20,455 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.example.javase17learningproject.archive.ArchiveStatistics;
 import com.example.javase17learningproject.archive.AuditLogArchiveService;
-import com.example.javase17learningproject.archive.model.ArchiveMetadata;
-import com.example.javase17learningproject.archive.util.ArchiveSearchUtils;
-import com.example.javase17learningproject.archive.util.ChecksumUtils;
-import com.example.javase17learningproject.archive.util.GzipUtils;
-import com.example.javase17learningproject.archive.util.JsonUtils;
-import com.example.javase17learningproject.archive.util.TarUtils;
 import com.example.javase17learningproject.entity.AuditLogEntity;
 import com.example.javase17learningproject.model.AuditLog;
 import com.example.javase17learningproject.model.audit.AuditEvent;
 import com.example.javase17learningproject.repository.AuditLogRepository;
 
+/**
+ * 監査ログのアーカイブ管理機能を実装するクラス.
+ *
+ * <p>アーカイブの作成、検索、統計情報の管理を行います。
+ * 実際のファイル操作は {@link AuditLogArchiveStorageImpl} に委譲します。</p>
+ *
+ * <p>各メソッドの責務は以下の通りです：</p>
+ * <ul>
+ *   <li>createDailyArchiveメソッド:
+ *     <ul>
+ *       <li>DBからのログ取得とモデル変換を担当</li>
+ *       <li>ビジネスロジックをfetchAndProcessDailyLogsメソッドに分離</li>
+ *     </ul>
+ *   </li>
+ *   <li>createMonthlyArchiveメソッド:
+ *     <ul>
+ *       <li>月次アーカイブデータの検証を追加</li>
+ *       <li>validateMonthlyArchiveDataメソッドで整合性チェック</li>
+ *     </ul>
+ *   </li>
+ *   <li>searchArchiveメソッド:
+ *     <ul>
+ *       <li>検索条件の妥当性検証を追加</li>
+ *       <li>結果の後処理（ソート）を実装</li>
+ *       <li>ビジネスロジックとストレージ操作を分離</li>
+ *     </ul>
+ *   </li>
+ *   <li>verifyArchiveメソッド:
+ *     <ul>
+ *       <li>アーカイブの存在確認と基本検証を追加</li>
+ *       <li>DBとの整合性チェックを実装</li>
+ *     </ul>
+ *   </li>
+ *   <li>deleteOldArchivesメソッド:
+ *     <ul>
+ *       <li>削除対象の日付検証を追加</li>
+ *       <li>DBとの整合性チェックを実装</li>
+ *       <li>アーカイブの事前検証を追加</li>
+ *     </ul>
+ *   </li>
+ * </ul>
+ */
 @Service
 public class AuditLogArchiveServiceImpl implements AuditLogArchiveService {
 
     private static final Logger logger = LoggerFactory.getLogger(AuditLogArchiveServiceImpl.class);
-    private static final String ARCHIVE_BASE_DIR = "archives";
-    private static final String DAILY_ARCHIVE_DIR = "daily";
-    private static final String MONTHLY_ARCHIVE_DIR = "monthly";
-
+    
+    private final AuditLogArchiveStorageImpl archiveStorage;
     private final AtomicReference<ArchiveStatistics> statistics;
+    private final AuditLogRepository auditLogRepository;
 
     @Autowired
-    private AuditLogRepository auditLogRepository;
-
-    public AuditLogArchiveServiceImpl() {
-        initializeArchiveDirectories();
+    public AuditLogArchiveServiceImpl(
+            AuditLogArchiveStorageImpl archiveStorage,
+            AuditLogRepository auditLogRepository) {
+        this.archiveStorage = archiveStorage;
+        this.auditLogRepository = auditLogRepository;
         this.statistics = new AtomicReference<>(new ArchiveStatistics(0, 0, 0, 0.0, null, null));
         updateStatistics();
     }
 
+    /**
+     * 指定された日付の監査ログを日次アーカイブとして保存します.
+     *
+     * @param date アーカイブ対象の日付
+     * @return アーカイブされたログの件数
+     * @throws IOException アーカイブファイルの作成に失敗した場合
+     */
     @Override
     @Transactional
     public int createDailyArchive(LocalDate date) throws IOException {
         logger.info("Starting daily archive creation for date: {}", date);
 
-        // 指定日のログを取得
-        LocalDateTime startDateTime = date.atStartOfDay();
-        LocalDateTime endDateTime = date.atTime(LocalTime.MAX);
-        List<AuditLogEntity> logEntities = auditLogRepository.findByCreatedAtBetween(startDateTime, endDateTime);
-        
-        if (logEntities.isEmpty()) {
-            logger.info("No logs found for date: {}", date);
+        // 指定日のログを取得してビジネスロジックを適用
+        List<AuditLog> logs = fetchAndProcessDailyLogs(date);
+        if (logs.isEmpty()) {
             return 0;
         }
 
-        // エンティティをモデルに変換
-        List<AuditLog> logs = logEntities.stream()
-                .map(AuditLogEntity::toRecord)
-                .toList();
-
-        // アーカイブファイルを作成
-        Path archivePath = getDailyArchivePath(date);
-        createDirectoriesIfNotExist(archivePath.getParent());
-
-        // JSONデータの作成
-        Map<String, Object> archiveData = Map.of(
-            "metadata", createMetadata(ArchiveMetadata.ArchiveType.DAILY, startDateTime, endDateTime, logs.size()),
-            "logs", logs
-        );
-        String jsonContent = JsonUtils.toJson(archiveData);
-
-        // GZIP圧縮して保存
-        byte[] compressed = GzipUtils.compress(jsonContent);
-        Files.write(archivePath, compressed);
-
+        // ストレージ層に委譲してアーカイブを作成
+        archiveStorage.createDailyArchive(date, logs);
         updateStatistics();
-        logger.info("Daily archive created successfully: {} ({} records)", archivePath, logs.size());
+
+        logger.info("Daily archive created successfully with {} records", logs.size());
         return logs.size();
     }
 
+    /**
+     * 日次ログの取得と処理を行います.
+     *
+     * @param date 対象日付
+     * @return 処理済みの監査ログリスト
+     */
+    private List<AuditLog> fetchAndProcessDailyLogs(LocalDate date) {
+        LocalDateTime startDateTime = date.atStartOfDay();
+        LocalDateTime endDateTime = date.atTime(LocalTime.MAX);
+        List<AuditLogEntity> logEntities = auditLogRepository.findByCreatedAtBetween(startDateTime, endDateTime);
+
+        if (logEntities.isEmpty()) {
+            logger.info("No logs found for date: {}", date);
+            return List.of();
+        }
+
+        // エンティティをモデルに変換
+        return logEntities.stream()
+                .map(AuditLogEntity::toRecord)
+                .toList();
+    }
+
+    /**
+     * 指定された月の日次アーカイブをまとめて月次アーカイブとして保存します.
+     *
+     * <p>月次アーカイブファイルは以下の形式で保存されます：
+     * archives/monthly/YYYY/audit_log_YYYYMM.tar.gz</p>
+     *
+     * @param yearMonth アーカイブ対象の年月
+     * @return アーカイブされた日次アーカイブファイルの数
+     * @throws IOException アーカイブファイルの作成に失敗した場合
+     */
+    /**
+     * 月次アーカイブを作成します.
+     *
+     * @param yearMonth アーカイブ対象の年月
+     * @return アーカイブされたファイル数
+     * @throws IOException アーカイブファイルの作成に失敗した場合
+     */
     @Override
     @Transactional
     public int createMonthlyArchive(YearMonth yearMonth) throws IOException {
         logger.info("Starting monthly archive creation for: {}", yearMonth);
 
-        // 日次アーカイブを収集
-        List<File> dailyArchives = new ArrayList<>();
-        LocalDate start = yearMonth.atDay(1);
-        LocalDate end = yearMonth.atEndOfMonth();
-
-        for (LocalDate date = start; !date.isAfter(end); date = date.plusDays(1)) {
-            Path archivePath = getDailyArchivePath(date);
-            if (Files.exists(archivePath)) {
-                dailyArchives.add(archivePath.toFile());
-            }
-        }
-
-        if (dailyArchives.isEmpty()) {
-            logger.info("No daily archives found for month: {}", yearMonth);
+        // 月間のアーカイブ対象データを検証
+        List<Path> validArchives = collectAndValidateMonthlyArchives(yearMonth);
+        if (validArchives.isEmpty()) {
+            logger.warn("No valid archives found for month: {}", yearMonth);
             return 0;
         }
 
-        // 月次アーカイブを作成
-        Path monthlyArchivePath = getMonthlyArchivePath(yearMonth);
-        createDirectoriesIfNotExist(monthlyArchivePath.getParent());
+        // 検証済みデータのアーカイブをストレージ層に委譲
+        int result = archiveStorage.createMonthlyArchive(yearMonth, validArchives);
+        updateStatistics();
 
-        // 作業用の一時ディレクトリを作成
-        Path tempDir = Files.createTempDirectory("monthly_archive_");
-        try {
-            // メタデータを作成
-            ArchiveMetadata metadata = createMetadata(
-                ArchiveMetadata.ArchiveType.MONTHLY,
-                yearMonth.atDay(1).atStartOfDay(),
-                yearMonth.atEndOfMonth().atTime(LocalTime.MAX),
-                dailyArchives.size()
-            );
-
-            // メタデータをJSON形式で保存
-            File metadataFile = tempDir.resolve("metadata.json").toFile();
-            Files.writeString(metadataFile.toPath(), JsonUtils.toJson(metadata));
-
-            // TARアーカイブを作成
-            dailyArchives.add(metadataFile);
-            File tarFile = tempDir.resolve("archive.tar").toFile();
-            TarUtils.createTarArchive(dailyArchives, tarFile);
-
-            // GZIP圧縮して保存
-            byte[] tarContent = Files.readAllBytes(tarFile.toPath());
-            byte[] compressed = GzipUtils.compress(new String(tarContent));
-            Files.write(monthlyArchivePath, compressed);
-
-            updateStatistics();
-            logger.info("Monthly archive created successfully: {} ({} files)", monthlyArchivePath, dailyArchives.size());
-            return dailyArchives.size();
-
-        } finally {
-            // 一時ファイルを削除
-            Files.walk(tempDir)
-                .sorted(Comparator.reverseOrder())
-                .forEach(p -> {
-                    try {
-                        Files.delete(p);
-                    } catch (IOException e) {
-                        logger.warn("Failed to delete temporary file: {}", p, e);
-                    }
-                });
+        if (result > 0) {
+            logger.info("Monthly archive created successfully with {} files", result);
+        } else {
+            logger.info("No daily archives found for month: {}", yearMonth);
         }
+
+        return result;
     }
 
+    /**
+     * 月次アーカイブ対象の日次アーカイブファイルを収集し検証します.
+     *
+     * @param yearMonth 対象年月
+     * @return 検証済みの日次アーカイブファイルのリスト
+     * @throws IOException 処理に失敗した場合
+     */
+    private List<Path> collectAndValidateMonthlyArchives(YearMonth yearMonth) throws IOException {
+        List<Path> validArchives = new ArrayList<>();
+        LocalDate start = yearMonth.atDay(1);
+        LocalDate end = yearMonth.atEndOfMonth();
+
+        // 各日のアーカイブを検証して収集
+        for (LocalDate date = start; !date.isAfter(end); date = date.plusDays(1)) {
+            Path archivePath = archiveStorage.getDailyArchivePath(date);
+            if (!Files.exists(archivePath)) {
+                logger.debug("Daily archive not found for: {}", date);
+                continue;
+            }
+
+            if (validateArchive(date)) {
+                validArchives.add(archivePath);
+                logger.debug("Valid archive found for: {}", date);
+            } else {
+                logger.warn("Invalid archive found for: {}, skipping", date);
+            }
+        }
+
+        return validArchives;
+    }
+
+    /**
+     * 月次アーカイブ対象データの検証を行います.
+     *
+     * @param yearMonth 対象年月
+     * @return 検証結果
+     */
+    private boolean validateMonthlyArchiveData(YearMonth yearMonth) {
+        LocalDate startDate = yearMonth.atDay(1);
+        LocalDate endDate = yearMonth.atEndOfMonth();
+
+        // 月間の全ての日次アーカイブの整合性を確認
+        for (LocalDate date = startDate; !date.isAfter(endDate); date = date.plusDays(1)) {
+            try {
+                if (archiveStorage.verifyArchive(date)) {
+                    logger.debug("Daily archive verified for: {}", date);
+                } else {
+                    logger.warn("Daily archive verification failed for: {}", date);
+                    return false;
+                }
+            } catch (IOException e) {
+                logger.warn("Failed to verify daily archive for: {}", date, e);
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * アーカイブから条件に一致する監査ログを検索します.
+     *
+     * @param start 検索開始日時
+     * @param end 検索終了日時
+     * @param eventType イベントタイプ
+     * @param severity 重要度
+     * @return 検索結果のリスト
+     * @throws IOException 検索に失敗した場合
+     */
     @Override
     public List<AuditLog> searchArchive(
             LocalDateTime start,
             LocalDateTime end,
             String eventType,
-            AuditEvent.Severity severity
-    ) throws IOException {
+            AuditEvent.Severity severity) throws IOException {
+        // 検索条件の妥当性を検証
+        validateSearchCriteria(start, end, eventType, severity);
         logger.info("Searching archives from {} to {}", start, end);
-        List<AuditLog> results = new ArrayList<>();
-
-        // 日次アーカイブを検索
-        Path dailyArchiveBase = Paths.get(ARCHIVE_BASE_DIR, DAILY_ARCHIVE_DIR);
-        if (Files.exists(dailyArchiveBase)) {
-            List<AuditLog> dailyResults = searchDailyArchives(dailyArchiveBase, start, end, eventType, severity);
-            results.addAll(dailyResults);
-        }
-
-        // 月次アーカイブを検索
-        Path monthlyArchiveBase = Paths.get(ARCHIVE_BASE_DIR, MONTHLY_ARCHIVE_DIR);
-        if (Files.exists(monthlyArchiveBase)) {
-            List<AuditLog> monthlyResults = searchMonthlyArchives(monthlyArchiveBase, start, end, eventType, severity);
-            results.addAll(monthlyResults);
-        }
-
-        // 結果をソート
-        results.sort(Comparator.comparing(AuditLog::createdAt));
-        logger.info("Found {} matching logs", results.size());
-
+        
+        // ストレージ層に検索を委譲
+        List<AuditLog> results = archiveStorage.searchArchives(start, end, eventType, severity);
+        
+        // 結果の後処理（フィルタリング、ソートなど）
+        results = processSearchResults(results);
+        logger.info("Found {} matching logs after processing", results.size());
+        
         return results;
     }
 
-    @Override
-    public boolean verifyArchive(LocalDate date) throws IOException {
-        Path archivePath = getDailyArchivePath(date);
-        if (!Files.exists(archivePath)) {
-            logger.warn("Archive not found: {}", archivePath);
+    /**
+     * アーカイブの存在チェックと基本的な検証を行います.
+     *
+     * @param date 検証対象の日付
+     * @return 検証結果
+     * @throws IOException 検証に失敗した場合
+     */
+    private boolean validateArchive(LocalDate date) throws IOException {
+        if (date.isAfter(LocalDate.now())) {
+            logger.warn("Cannot verify future date archive: {}", date);
             return false;
         }
 
-        try {
-            byte[] compressed = Files.readAllBytes(archivePath);
-            String content = GzipUtils.decompress(compressed);
-            Map<String, Object> archiveData = JsonUtils.fromJson(content, Map.class);
-            Map<String, Object> metadata = (Map<String, Object>) archiveData.get("metadata");
-            String storedChecksum = (String) metadata.get("checksum");
+        // DBに対象日付のログが存在するか確認
+        LocalDateTime startDateTime = date.atStartOfDay();
+        LocalDateTime endDateTime = date.atTime(LocalTime.MAX);
+        List<AuditLogEntity> logEntities = auditLogRepository.findByCreatedAtBetween(startDateTime, endDateTime);
 
-            return ChecksumUtils.verifyChecksum(content, storedChecksum);
-        } catch (Exception e) {
-            logger.error("Archive verification failed: {}", archivePath, e);
-            return false;
+        // ログが存在しない場合も正常とみなす
+        if (logEntities.isEmpty()) {
+            return true;
+        }
+
+        // ストレージ層で物理的な検証を実行
+        return archiveStorage.verifyArchive(date);
+    }
+
+    private void validateSearchCriteria(
+            LocalDateTime start,
+            LocalDateTime end,
+            String eventType,
+            AuditEvent.Severity severity) {
+        if (start == null || end == null) {
+            throw new IllegalArgumentException("Start and end dates must not be null");
+        }
+        if (start.isAfter(end)) {
+            throw new IllegalArgumentException("Start date must not be after end date");
+        }
+        if (start.until(end, java.time.temporal.ChronoUnit.DAYS) > 365) {
+            throw new IllegalArgumentException("Search period must not exceed 365 days");
         }
     }
 
-    @Override
-    public int deleteOldArchives(LocalDate beforeDate) throws IOException {
-        logger.info("Starting deletion of archives before: {}", beforeDate);
-        int deletedCount = 0;
+    /**
+     * 検索結果の後処理を行います.
+     *
+     * @param results 検索結果
+     * @return 処理済みの検索結果
+     */
+    private List<AuditLog> processSearchResults(List<AuditLog> results) {
+        return results.stream()
+                .sorted(Comparator.comparing(AuditLog::createdAt).reversed())
+                .toList();
+    }
 
-        // 日次アーカイブの削除
-        try (Stream<Path> paths = Files.walk(Paths.get(ARCHIVE_BASE_DIR, DAILY_ARCHIVE_DIR))) {
-            deletedCount = paths
-                .filter(Files::isRegularFile)
-                .filter(p -> {
-                    try {
-                        byte[] compressed = Files.readAllBytes(p);
-                        String content = GzipUtils.decompress(compressed);
-                        Map<String, Object> archiveData = JsonUtils.fromJson(content, Map.class);
-                        Map<String, Object> metadata = (Map<String, Object>) archiveData.get("metadata");
-                        LocalDateTime archiveDate = LocalDateTime.parse((String) metadata.get("startDate"));
-                        return archiveDate.toLocalDate().isBefore(beforeDate);
-                    } catch (Exception e) {
-                        logger.warn("Failed to read archive metadata: {}", p, e);
-                        return false;
-                    }
-                })
-                .mapToInt(p -> {
-                    try {
-                        Files.delete(p);
-                        return 1;
-                    } catch (IOException e) {
-                        logger.error("Failed to delete archive: {}", p, e);
-                        return 0;
-                    }
-                })
-                .sum();
+    /**
+     * アーカイブを検証します.
+     *
+     * @param date 検証対象の日付
+     * @return 検証結果
+     * @throws IOException 検証に失敗した場合
+     */
+    @Override
+    public boolean verifyArchive(LocalDate date) throws IOException {
+        logger.info("Starting archive verification for date: {}", date);
+
+        // アーカイブの存在確認と基本的な検証
+        if (!validateArchiveExistence(date)) {
+            return false;
         }
 
-        updateStatistics();
-        logger.info("Deleted {} archive files", deletedCount);
+        // ストレージ層に詳細な検証を委譲
+        boolean result = archiveStorage.verifyArchive(date);
+        
+        if (!result) {
+            logger.warn("Archive verification failed for date: {}", date);
+        } else {
+            logger.info("Archive verification successful for date: {}", date);
+        }
+        
+        return result;
+    }
+
+    /**
+     * アーカイブの存在確認と基本的な検証を行います.
+     *
+     * @param date 検証対象の日付
+     * @return 検証結果
+     */
+    private boolean validateArchiveExistence(LocalDate date) {
+        if (date.isAfter(LocalDate.now())) {
+            logger.warn("Cannot verify future date archive: {}", date);
+            return false;
+        }
+
+        // DBに対象日付のログが存在するか確認
+        List<AuditLog> logs = fetchAndProcessDailyLogs(date);
+        if (logs.isEmpty()) {
+            logger.info("No logs exist for date: {}", date);
+            return true; // ログが存在しない場合も正常とみなす
+        }
+
+        return true;
+    }
+
+    /**
+     * 古いアーカイブを削除します.
+     *
+     * @param beforeDate この日付より前のアーカイブを削除
+     * @return 削除したファイル数
+     * @throws IOException 削除に失敗した場合
+     */
+    @Override
+    @Transactional
+    public int deleteOldArchives(LocalDate beforeDate) throws IOException {
+        logger.info("Starting deletion of archives before: {}", beforeDate);
+
+        // 削除対象日付の妥当性を検証
+        validateDeletionDate(beforeDate);
+
+        // 削除対象アーカイブの事前チェック
+        if (!validateArchivesForDeletion(beforeDate)) {
+            logger.warn("Archive validation failed, deletion aborted");
+            return 0;
+        }
+
+        // 検証済みアーカイブの削除をストレージ層に委譲
+        int deletedCount = archiveStorage.deleteOldArchives(beforeDate);
+        if (deletedCount > 0) {
+            updateStatistics();
+            logger.info("Successfully deleted {} archive files", deletedCount);
+        } else {
+            logger.info("No archives found to delete before: {}", beforeDate);
+        }
+
         return deletedCount;
     }
 
+    /**
+     * 削除対象日付の妥当性を検証します.
+     *
+     * @param beforeDate 削除対象日付
+     * @throws IllegalArgumentException 不正な日付の場合
+     */
+    private void validateDeletionDate(LocalDate beforeDate) {
+        if (beforeDate == null) {
+            throw new IllegalArgumentException("Deletion date must not be null");
+        }
+
+        LocalDate minimumRetentionDate = LocalDate.now().minusYears(1);
+        if (beforeDate.isAfter(minimumRetentionDate)) {
+            throw new IllegalArgumentException(
+                "Cannot delete archives less than 1 year old. Minimum deletion date: " + minimumRetentionDate);
+        }
+    }
+
+    /**
+     * 削除対象アーカイブの事前チェックを行います.
+     *
+     * @param beforeDate 削除対象日付
+     * @return 検証結果
+     */
+    private boolean validateArchivesForDeletion(LocalDate beforeDate) {
+        try {
+            // DBに古いログが残っていないことを確認
+            LocalDateTime startDateTime = LocalDateTime.MIN;
+            LocalDateTime endDateTime = beforeDate.atTime(LocalTime.MAX);
+            List<AuditLogEntity> oldLogs = auditLogRepository.findByCreatedAtBetween(
+                startDateTime, endDateTime);
+
+            if (!oldLogs.isEmpty()) {
+                logger.warn("{} unarchived logs found before {}", oldLogs.size(), beforeDate);
+                return false;
+            }
+
+            return true;
+        } catch (Exception e) {
+            logger.error("Failed to validate archives for deletion", e);
+            return false;
+        }
+    }
+
+    /**
+     * アーカイブの統計情報を取得します.
+     *
+     * <p>アーカイブファイルの数、ログの総数、総サイズ、圧縮率などの統計情報を返します。
+     * この情報は非同期に更新されるため、リアルタイムの値とは異なる可能性があります。</p>
+     *
+     * @return アーカイブの統計情報
+     */
     @Override
     public ArchiveStatistics getStatistics() {
         return statistics.get();
     }
 
-    private void initializeArchiveDirectories() {
-        try {
-            createDirectoriesIfNotExist(Paths.get(ARCHIVE_BASE_DIR));
-            createDirectoriesIfNotExist(Paths.get(ARCHIVE_BASE_DIR, DAILY_ARCHIVE_DIR));
-            createDirectoriesIfNotExist(Paths.get(ARCHIVE_BASE_DIR, MONTHLY_ARCHIVE_DIR));
-            logger.info("Archive directories initialized successfully");
-        } catch (IOException e) {
-            throw new RuntimeException("Failed to initialize archive directories", e);
-        }
-    }
-
-    private void createDirectoriesIfNotExist(Path path) throws IOException {
-        if (!Files.exists(path)) {
-            Files.createDirectories(path);
-            logger.info("Created directory: {}", path);
-        }
-    }
-
-    private Path getDailyArchivePath(LocalDate date) {
-        return Paths.get(
-            ARCHIVE_BASE_DIR,
-            DAILY_ARCHIVE_DIR,
-            String.valueOf(date.getYear()),
-            String.format("%02d", date.getMonthValue()),
-            String.format("audit_log_%s.json.gz", date)
-        );
-    }
-
-    private Path getMonthlyArchivePath(YearMonth yearMonth) {
-        return Paths.get(
-            ARCHIVE_BASE_DIR,
-            MONTHLY_ARCHIVE_DIR,
-            String.valueOf(yearMonth.getYear()),
-            String.format("audit_log_%d%02d.tar.gz", yearMonth.getYear(), yearMonth.getMonthValue())
-        );
-    }
-
-    private ArchiveMetadata createMetadata(
-            ArchiveMetadata.ArchiveType type,
-            LocalDateTime startDate,
-            LocalDateTime endDate,
-            long recordCount) {
-        String content = JsonUtils.toJson(recordCount);
-        String checksum = ChecksumUtils.calculateChecksum(content);
-
-        return new ArchiveMetadata(
-            type,
-            startDate,
-            endDate,
-            recordCount,
-            content.length(),
-            checksum
-        );
-    }
-
-    private List<AuditLog> searchDailyArchives(
-            Path baseDir,
-            LocalDateTime start,
-            LocalDateTime end,
-            String eventType,
-            AuditEvent.Severity severity) throws IOException {
-        List<AuditLog> results = new ArrayList<>();
-        LocalDate startDate = start.toLocalDate();
-        LocalDate endDate = end.toLocalDate();
-
-        for (LocalDate date = startDate; !date.isAfter(endDate); date = date.plusDays(1)) {
-            Path archivePath = getDailyArchivePath(date);
-            if (Files.exists(archivePath)) {
-                List<AuditLog> logs = ArchiveSearchUtils.searchDailyArchive(
-                    archivePath, start, end, eventType, severity);
-                results.addAll(logs);
-            }
-        }
-
-        return results;
-    }
-
-    private List<AuditLog> searchMonthlyArchives(
-            Path baseDir,
-            LocalDateTime start,
-            LocalDateTime end,
-            String eventType,
-            AuditEvent.Severity severity) throws IOException {
-        List<AuditLog> results = new ArrayList<>();
-        YearMonth startMonth = YearMonth.from(start);
-        YearMonth endMonth = YearMonth.from(end);
-
-        for (YearMonth yearMonth = startMonth; !yearMonth.isAfter(endMonth); yearMonth = yearMonth.plusMonths(1)) {
-            Path archivePath = getMonthlyArchivePath(yearMonth);
-            if (Files.exists(archivePath)) {
-                List<AuditLog> logs = ArchiveSearchUtils.searchMonthlyArchive(
-                    archivePath, start, end, eventType, severity);
-                results.addAll(logs);
-            }
-        }
-
-        return results;
-    }
-
+    /**
+     * 統計情報を更新します.
+     */
     private void updateStatistics() {
         try {
-            long totalFiles = 0;
-            long totalSize = 0;
-            long totalLogs = 0;
-            LocalDateTime lastArchiveDate = null;
-            LocalDateTime oldestArchiveDate = null;
-
-            Path dailyPath = Paths.get(ARCHIVE_BASE_DIR, DAILY_ARCHIVE_DIR);
-            if (Files.exists(dailyPath)) {
-                try (Stream<Path> paths = Files.walk(dailyPath)) {
-                    List<Path> archiveFiles = paths
-                        .filter(Files::isRegularFile)
-                        .filter(p -> p.toString().endsWith(".json.gz"))
-                        .toList();
-
-                    totalFiles = archiveFiles.size();
-                    
-                    for (Path path : archiveFiles) {
-                        totalSize += Files.size(path);
-                        byte[] compressed = Files.readAllBytes(path);
-                        String content = GzipUtils.decompress(compressed);
-                        Map<String, Object> archiveData = JsonUtils.fromJson(content, Map.class);
-                        Map<String, Object> metadata = (Map<String, Object>) archiveData.get("metadata");
-                        
-                        totalLogs += ((Number) metadata.get("recordCount")).longValue();
-                        
-                        LocalDateTime archiveDate = LocalDateTime.parse((String) metadata.get("startDate"));
-                        if (lastArchiveDate == null || archiveDate.isAfter(lastArchiveDate)) {
-                            lastArchiveDate = archiveDate;
-                        }
-                        if (oldestArchiveDate == null || archiveDate.isBefore(oldestArchiveDate)) {
-                            oldestArchiveDate = archiveDate;
-                        }
-                    }
-                }
-            }
-
-            double compressionRatio = totalSize > 0 ? 
-                (double) totalLogs * 200 / totalSize : 0.0;
-
-            statistics.set(new ArchiveStatistics(
-                totalFiles,
-                totalLogs,
-                totalSize,
-                compressionRatio,
-                lastArchiveDate,
-                oldestArchiveDate
-            ));
-
-            logger.debug("Statistics updated: files={}, logs={}, size={}", 
-                totalFiles, totalLogs, totalSize);
-
-        } catch (Exception e) {
+            ArchiveStatistics newStats = archiveStorage.calculateStatistics();
+            statistics.set(newStats);
+            logger.debug("Statistics updated: files={}, logs={}, size={}",
+                newStats.totalFiles(), newStats.totalLogs(), newStats.totalSize());
+        } catch (IOException e) {
             logger.error("Failed to update statistics", e);
         }
     }

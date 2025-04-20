@@ -31,11 +31,16 @@ build/
 
 ### VS Code ###
 .vscode/
-
 ### Logs ###
 logs/
 *.log
 *.log.gz
+
+### Archives ###
+archives/
+*.tar.gz
+*.json.gz
+
 
 ### OS specific ###
 .DS_Store

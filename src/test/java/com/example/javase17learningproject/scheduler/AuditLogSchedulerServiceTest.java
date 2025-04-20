@@ -26,7 +26,7 @@ import com.example.javase17learningproject.scheduler.model.ScheduledTask;
 import com.example.javase17learningproject.scheduler.model.TaskPriority;
 import com.example.javase17learningproject.scheduler.model.TaskResult;
 import com.example.javase17learningproject.scheduler.model.TaskType;
-import com.example.javase17learningproject.service.AuditLogArchiveService;
+import com.example.javase17learningproject.archive.AuditLogArchiveService;
 
 /**
  * 監査ログスケジューラーサービスのテストクラス。
