@@ -11,12 +11,15 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import org.mockito.Captor;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
+import org.mockito.MockitoAnnotations;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -24,32 +27,57 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 
 import com.example.javase17learningproject.model.AuditLog;
-import com.example.javase17learningproject.model.AuditLogEntity;
+import com.example.javase17learningproject.entity.AuditLogEntity;
+import com.example.javase17learningproject.service.impl.AuditLogServiceImpl;
 import com.example.javase17learningproject.model.audit.AuditEvent.Severity;
 import com.example.javase17learningproject.repository.AuditLogInMemoryStorage;
 import com.example.javase17learningproject.repository.AuditLogRepository;
 
+/**
+ * 監査ログサービスのテストクラス。
+ * 以下の機能のテストを提供します：
+ *
+ * - 監査ログの保存と取得
+ * - インメモリキャッシュとデータベースの連携
+ * - ログの集計と検索
+ * - アーカイブ処理
+ */
 @ExtendWith(SpringExtension.class)
 class AuditLogServiceTest {
 
+    /** データベースアクセス用のモックリポジトリ */
     @MockBean
     private AuditLogRepository repository;
 
+    /** インメモリストレージのモック */
     @MockBean
     private AuditLogInMemoryStorage memoryStorage;
 
+    /** エンティティのキャプチャ用 */
     @Captor
     private ArgumentCaptor<AuditLogEntity> entityCaptor;
 
+    /** テスト対象のサービス */
     private AuditLogService service;
+
+    /** テスト用の基準時刻 */
     private LocalDateTime baseTime;
 
     @BeforeEach
     void setUp() {
+        MockitoAnnotations.openMocks(this);
         service = new AuditLogServiceImpl(repository, memoryStorage);
         baseTime = LocalDateTime.now();
+
+        // 基本的なモックの設定
+        when(memoryStorage.findLatestLogs(anyInt())).thenReturn(List.of());
+        when(repository.save(any())).thenAnswer(i -> i.getArgument(0));
     }
 
+    /**
+     * 監査ログの保存をテストします。
+     * メモリキャッシュとデータベースの両方に正しく保存されることを確認します。
+     */
     @Test
     void testSaveAuditLog() {
         // Given
@@ -67,6 +95,10 @@ class AuditLogServiceTest {
         assertThat(saved).isNotNull();
     }
 
+    /**
+     * メモリキャッシュからの監査ログ取得をテストします。
+     * キャッシュヒット時にデータベースにアクセスしないことを確認します。
+     */
     @Test
     void testFindByIdFromMemory() {
         // Given
@@ -81,6 +113,10 @@ class AuditLogServiceTest {
         verify(repository, never()).findById(any());
     }
 
+    /**
+     * データベースからの監査ログ取得をテストします。
+     * キャッシュミス時にデータベースから正しく取得できることを確認します。
+     */
     @Test
     void testFindByIdFromDatabase() {
         // Given
@@ -97,6 +133,10 @@ class AuditLogServiceTest {
         verify(repository).findById(1L);
     }
 
+    /**
+     * 古いログのアーカイブ処理をテストします。
+     * 指定期間より古いログが正しく削除されることを確認します。
+     */
     @Test
     void testArchiveOldLogs() {
         // Given
@@ -109,6 +149,10 @@ class AuditLogServiceTest {
         verify(repository).deleteByCreatedAtBefore(any());
     }
 
+    /**
+     * データベースへの移行処理をテストします。
+     * メモリキャッシュのデータが正しくデータベースに移行されることを確認します。
+     */
     @Test
     void testMigrateToDatabase() {
         // Given
@@ -126,6 +170,10 @@ class AuditLogServiceTest {
         verify(memoryStorage).clear();
     }
 
+    /**
+     * キャッシュの更新処理をテストします。
+     * データベースの最新データでキャッシュが更新されることを確認します。
+     */
     @Test
     void testRefreshCache() {
         // Given
@@ -145,6 +193,10 @@ class AuditLogServiceTest {
         verify(memoryStorage, times(2)).save(any());
     }
 
+    /**
+     * イベントタイプごとの集計をテストします。
+     * ログが正しく集計されることを確認します。
+     */
     @Test
     void testAggregateByEventType() {
         // Given
@@ -167,6 +219,68 @@ class AuditLogServiceTest {
             .containsEntry("TEST2", 1L);
     }
 
+    /**
+     * 監査ログの検索機能をテストします。
+     * 指定された条件で正しく検索できることを確認します。
+     */
+    @Test
+    void testSearchLogs() {
+        // Given
+        PageRequest pageRequest = PageRequest.of(0, 10);
+        List<AuditLogEntity> entities = List.of(
+            new AuditLogEntity(1L, "TEST1", Severity.HIGH, 1L, 2L, "test1", baseTime),
+            new AuditLogEntity(2L, "TEST1", Severity.MEDIUM, 1L, 2L, "test2", baseTime)
+        );
+        Page<AuditLogEntity> page = new PageImpl<>(entities, pageRequest, entities.size());
+        
+        when(repository.searchLogs(
+            eq("TEST1"), eq(Severity.HIGH), eq(1L),
+            eq(baseTime), eq(baseTime.plusDays(1)), eq(pageRequest)
+        )).thenReturn(page);
+
+        // When
+        Page<AuditLog> result = service.searchLogs(
+            "TEST1", Severity.HIGH, 1L,
+            baseTime, baseTime.plusDays(1), pageRequest
+        );
+
+        // Then
+        assertThat(result).isNotNull();
+        assertThat(result.getContent())
+            .hasSize(2)
+            .allMatch(log -> log.eventType().equals("TEST1"));
+
+        verify(repository).searchLogs(
+            eq("TEST1"), eq(Severity.HIGH), eq(1L),
+            eq(baseTime), eq(baseTime.plusDays(1)), eq(pageRequest)
+        );
+    }
+
+    /**
+     * 最新の監査ログ取得をテストします。
+     * メモリキャッシュから最新のログを取得できることを確認します。
+     */
+    @Test
+    void testFindLatestLogs() {
+        // Given
+        List<AuditLog> logs = List.of(
+            new AuditLog(1L, "TEST1", Severity.HIGH, 1L, 2L, "test1", baseTime),
+            new AuditLog(2L, "TEST2", Severity.MEDIUM, 1L, 2L, "test2", baseTime)
+        );
+        when(memoryStorage.findLatestLogs(2)).thenReturn(logs);
+
+        // When
+        List<AuditLog> result = service.findLatestLogs(2);
+
+        // Then
+        assertThat(result).hasSize(2);
+        verify(memoryStorage).findLatestLogs(2);
+    }
+
+    /**
+     * 重要度ごとの集計をテストします。
+     * ログが重要度レベルごとに正しく集計されることを確認します。
+     */
     @Test
     void testCountBySeverity() {
         // Given
