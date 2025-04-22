@@ -13,7 +13,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.test.context.ActiveProfiles;
 
-import com.example.javase17learningproject.model.AuditLogEntity;
+import com.example.javase17learningproject.entity.AuditLogEntity;
 import com.example.javase17learningproject.model.audit.AuditEvent.Severity;
 
 import jakarta.validation.ConstraintViolationException;
