@@ -2,7 +2,7 @@ package com.example.javase17learningproject.cache;
 
 import com.example.javase17learningproject.entity.AuditLogEntity;
 import com.example.javase17learningproject.model.AuditLog;
-import com.example.javase17learningproject.model.Severity;
+import com.example.javase17learningproject.model.audit.AuditEvent;
 import com.example.javase17learningproject.repository.AuditLogRepository;
 import com.example.javase17learningproject.service.AuditLogCacheService;
 import com.github.benmanes.caffeine.cache.Cache;
@@ -21,6 +21,18 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
+/**
+ * {@link AuditLogCacheService}のユニットテストクラス。
+ *
+ * <p>このテストクラスでは、監査ログのキャッシュ機能に関する以下の動作を検証します：
+ * <ul>
+ *   <li>キャッシュのヒット/ミス時の動作</li>
+ *   <li>データの保存時のキャッシュ更新</li>
+ *   <li>データの削除時のキャッシュ無効化</li>
+ *   <li>検索結果のキャッシュ</li>
+ *   <li>キャッシュの整合性チェックと強制更新</li>
+ * </ul>
+ */
 class AuditLogCacheServiceTest {
 
     @Mock
@@ -32,6 +44,12 @@ class AuditLogCacheServiceTest {
     private Cache<Long, AuditLog> cache;
     private AuditLogCacheService cacheService;
 
+    /**
+     * 各テストケース実行前の初期化処理。
+     *
+     * <p>テスト用のモックオブジェクトを初期化し、テスト用のキャッシュインスタンスを
+     * 作成してAuditLogCacheServiceを初期化します。
+     */
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
@@ -45,6 +63,15 @@ class AuditLogCacheServiceTest {
         cacheService = new AuditLogCacheService(cache, repository, cacheManager);
     }
 
+    /**
+     * キャッシュミス時のfindByIdメソッドのテスト。
+     *
+     * <p>以下のシナリオを検証します：
+     * <ul>
+     *   <li>1回目の呼び出し：キャッシュミスによりデータベースからデータを取得</li>
+     *   <li>2回目の呼び出し：キャッシュヒットによりデータベースアクセスなし</li>
+     * </ul>
+     */
     @Test
     void findById_キャッシュミス時にデータベースから取得() {
         // テストデータの準備
@@ -57,7 +84,7 @@ class AuditLogCacheServiceTest {
 
         // 検証
         assertThat(result1).isPresent();
-        assertThat(result1.get().getId()).isEqualTo(id);
+        assertThat(result1.get().id()).isEqualTo(id);
         verify(repository, times(1)).findById(id);
         assertThat(cache.stats().hitCount()).isEqualTo(0);
         assertThat(cache.stats().missCount()).isEqualTo(1);
@@ -67,27 +94,37 @@ class AuditLogCacheServiceTest {
 
         // 検証
         assertThat(result2).isPresent();
-        assertThat(result2.get().getId()).isEqualTo(id);
+        assertThat(result2.get().id()).isEqualTo(id);
         verify(repository, times(1)).findById(id); // リポジトリは1回だけ呼ばれる
         assertThat(cache.stats().hitCount()).isEqualTo(1);
     }
 
+    /**
+     * 監査ログ保存時のキャッシュ更新テスト。
+     *
+     * <p>データベースへの保存と同時にキャッシュが正しく更新されることを検証します。
+     */
     @Test
     void save_キャッシュを更新() {
         // テストデータの準備
         AuditLog log = createTestLog(1L);
-        AuditLogEntity entity = AuditLogEntity.fromModel(log);
+        AuditLogEntity entity = AuditLogEntity.fromRecord(log);
         when(repository.save(any(AuditLogEntity.class))).thenReturn(entity);
 
         // 保存を実行
         AuditLog saved = cacheService.save(log);
 
         // 検証
-        assertThat(saved.getId()).isEqualTo(log.getId());
-        assertThat(cache.getIfPresent(log.getId())).isNotNull();
+        assertThat(saved.id()).isEqualTo(log.id());
+        assertThat(cache.getIfPresent(log.id())).isNotNull();
         verify(repository, times(1)).save(any(AuditLogEntity.class));
     }
 
+    /**
+     * 監査ログ削除時のキャッシュ削除テスト。
+     *
+     * <p>データベースからの削除と同時にキャッシュからも対象データが削除されることを検証します。
+     */
     @Test
     void delete_キャッシュからも削除() {
         // テストデータの準備
@@ -103,13 +140,19 @@ class AuditLogCacheServiceTest {
         verify(cacheManager, times(1)).invalidate(id);
     }
 
+    /**
+     * 日付範囲とタイプによる検索結果のキャッシュテスト。
+     *
+     * <p>検索結果が正しくキャッシュされ、各結果エントリが個別にキャッシュに
+     * 保存されることを検証します。
+     */
     @Test
     void findByDateRangeAndType_検索結果をキャッシュ() {
         // テストデータの準備
         LocalDateTime start = LocalDateTime.now().minusDays(1);
         LocalDateTime end = LocalDateTime.now();
         String eventType = "TEST_EVENT";
-        Severity severity = Severity.HIGH;
+        AuditEvent.Severity severity = AuditEvent.Severity.HIGH;
 
         List<AuditLogEntity> entities = Arrays.asList(
             createTestEntity(1L),
@@ -124,11 +167,16 @@ class AuditLogCacheServiceTest {
 
         // 検証
         assertThat(results).hasSize(2);
-        results.forEach(log -> 
-            assertThat(cache.getIfPresent(log.getId())).isNotNull()
+        results.forEach(log ->
+            assertThat(cache.getIfPresent(log.id())).isNotNull()
         );
     }
 
+    /**
+     * キャッシュの整合性チェック機能のテスト。
+     *
+     * <p>キャッシュマネージャーの検証機能が正しく呼び出されることを確認します。
+     */
     @Test
     void verifyCache_整合性チェックを実行() {
         // キャッシュ検証を実行
@@ -138,6 +186,11 @@ class AuditLogCacheServiceTest {
         verify(cacheManager, times(1)).verifyCache();
     }
 
+    /**
+     * キャッシュの強制更新機能のテスト。
+     *
+     * <p>キャッシュマネージャーの強制更新機能が正しく呼び出されることを確認します。
+     */
     @Test
     void refreshCache_強制更新を実行() {
         // キャッシュ更新を実行
@@ -147,25 +200,39 @@ class AuditLogCacheServiceTest {
         verify(cacheManager, times(1)).forceRefresh();
     }
 
+    /**
+     * テスト用の監査ログエンティティを作成します。
+     *
+     * @param id エンティティのID
+     * @return 指定されたIDを持つテスト用の監査ログエンティティ
+     */
     private AuditLogEntity createTestEntity(Long id) {
-        AuditLogEntity entity = new AuditLogEntity();
-        entity.setId(id);
-        entity.setEventType("TEST_EVENT");
-        entity.setSeverity(Severity.HIGH);
-        entity.setUserId(1L);
-        entity.setDescription("Test log " + id);
-        entity.setCreatedAt(LocalDateTime.now());
-        return entity;
+        return new AuditLogEntity(
+            id,
+            "TEST_EVENT",
+            AuditEvent.Severity.HIGH,
+            1L,
+            1L,
+            "Test log " + id,
+            LocalDateTime.now()
+        );
     }
 
+    /**
+     * テスト用の監査ログモデルを作成します。
+     *
+     * @param id モデルのID
+     * @return 指定されたIDを持つテスト用の監査ログモデル
+     */
     private AuditLog createTestLog(Long id) {
-        AuditLog log = new AuditLog();
-        log.setId(id);
-        log.setEventType("TEST_EVENT");
-        log.setSeverity(Severity.HIGH);
-        log.setUserId(1L);
-        log.setDescription("Test log " + id);
-        log.setCreatedAt(LocalDateTime.now());
-        return log;
+        return new AuditLog(
+            id,
+            "TEST_EVENT",
+            AuditEvent.Severity.HIGH,
+            1L,
+            1L,
+            "Test log " + id,
+            LocalDateTime.now()
+        );
     }
 }

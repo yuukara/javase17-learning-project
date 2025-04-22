@@ -119,6 +119,7 @@ public class AuditLogCacheService {
     @Transactional
     public void delete(Long id) {
         repository.deleteById(id);
+        cache.invalidate(id);      // キャッシュから直接削除
         cacheManager.invalidate(id);
     }
 
