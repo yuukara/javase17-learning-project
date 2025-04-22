@@ -1,43 +1,23 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
-    <!-- カラー出力を有効化 -->
-    <conversionRule conversionWord="clr" 
-        converterClass="org.springframework.boot.logging.logback.ColorConverter" />
-
-    <!-- コンソール出力の設定 -->
+    <!-- コンソール出力設定 -->
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
-            <pattern>%clr(%d{HH:mm:ss.SSS}){faint} %clr(%5p) %clr(---){faint} %clr([%15.15t]){faint} %clr(%-40.40logger{39}){cyan} %clr(:){faint} %m%n</pattern>
-            <charset>UTF-8</charset>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
         </encoder>
     </appender>
 
-    <!-- E2Eテスト用のファイル出力設定 -->
-    <appender name="E2E_FILE" class="ch.qos.logback.core.FileAppender">
-        <file>logs/e2e-test.log</file>
-        <append>false</append>
+    <!-- テスト詳細ログ出力設定 -->
+    <appender name="TEST_DETAIL" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
-            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
-            <charset>UTF-8</charset>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
         </encoder>
     </appender>
 
-    <!-- テスト実行に関する詳細ログ -->
-    <appender name="TEST_DETAIL" class="ch.qos.logback.core.FileAppender">
-        <file>logs/test-detail.log</file>
-        <append>false</append>
-        <encoder>
-            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
-            <charset>UTF-8</charset>
-        </encoder>
-    </appender>
-
-    <!-- アプリケーションのログレベル設定 -->
-    <logger name="com.example.javase17learningproject" level="DEBUG">
-        <appender-ref ref="E2E_FILE"/>
+    <!-- エンティティテストのログレベルを設定 -->
+    <logger name="com.example.javase17learningproject.entity" level="DEBUG">
+        <appender-ref ref="TEST_DETAIL"/>
     </logger>
-
-    <!-- E2Eテストパッケージのログ設定 -->
     <logger name="com.example.javase17learningproject.e2e" level="DEBUG">
         <appender-ref ref="TEST_DETAIL"/>
     </logger>
@@ -62,8 +42,9 @@
         <appender-ref ref="TEST_DETAIL"/>
     </logger>
 
-    <!-- ルートロガーの設定 -->
+    <!-- ルートロガーの設定 (重複を削除) -->
     <root level="INFO">
         <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="TEST_DETAIL"/>
     </root>
 </configuration>
