@@ -1,6 +1,45 @@
 # テストパッケージの修正方針
 
-## 1. 問題の分析
+## 作業状況
+
+### ✅ 完了した作業（2025/4/23）
+
+1. パッケージ構造の改善
+   - AuditLogEntityTestをmodel→entityパッケージに移動
+   - テストクラスの参照を更新
+
+2. ドキュメント整備
+   - テスト修正方針の文書化
+   - Issueテンプレートの作成（.github/ISSUE_TEMPLATE/test-fix.md）
+
+### ✅ 完了した作業（2025/5/10）
+
+1. テスト設定ファイルの分離と整理
+   - application-test-common.properties（共通設定）
+     * データベース設定
+     * 基本的なログ設定
+     * 共通キャッシュ設定
+   - application-test-unit.properties（ユニットテスト用）
+     * キャッシュ無効化設定
+     * 最小限の設定のみ
+   - application-test-integration.properties（統合テスト用）
+     * キャッシュ有効設定
+     * メトリクス設定
+   - application-test-e2e.properties（E2Eテスト用）
+     * Selenium設定
+     * Web関連設定
+
+### 🔄 次の作業
+
+1. キャッシュ設定の整理（優先度：高）
+   - Hibernateキャッシュの設定修正
+   - アプリケーションキャッシュの設定調整
+
+3. テストコンテキストの最適化（優先度：中）
+   - 各テストタイプに必要最小限の設定を適用
+   - テストアノテーションの見直し
+
+## 1. 問題の分析（完了）
 
 ### 1.1 キャッシュ関連の問題
 - Hibernateの2次キャッシュとアプリケーションキャッシュ（Caffeine）の混在
